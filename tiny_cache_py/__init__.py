@@ -1,3 +1,19 @@
-from .client import CacheClient
+from .client import (
+    CacheClient,
+    CacheError,
+    CacheConnectionError,
+    CacheValidationError,
+    CacheTimeoutError,
+    CacheNotFoundError,
+    CacheInvalidArgumentError
+)
 
-__all__ = ['CacheClient']
+__all__ = [
+    'CacheClient',
+    'CacheError',
+    'CacheConnectionError',
+    'CacheValidationError',
+    'CacheTimeoutError',
+    'CacheNotFoundError',
+    'CacheInvalidArgumentError'
+]
