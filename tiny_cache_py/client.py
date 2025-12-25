@@ -157,7 +157,7 @@ class CacheClient:
             return
 
         url = self._target()
-        self.logger.info("Connecting to cache service at %s", url)
+        self.logger.debug("Connecting to cache service at %s", url)
 
         if self.use_ssl:
             credentials = grpc.ssl_channel_credentials()
@@ -184,12 +184,12 @@ class CacheClient:
 
         self._stub = cache_pb2_grpc.CacheServiceStub(self._channel)
         self._closed = False
-        self.logger.info("Successfully connected to cache service at %s", url)
+        self.logger.debug("Successfully connected to cache service at %s", url)
 
     async def close(self) -> None:
         """Close connection to cache service"""
         if self._channel and not self._closed:
-            self.logger.info("Closing connection to cache service")
+            self.logger.debug("Closing connection to cache service")
             await self._channel.close()
             self._channel = None
             self._stub = None
