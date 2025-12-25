@@ -585,6 +585,7 @@ class CacheClient:
         self,
         key: str,
         *,
+        raise_on_missing: bool = False,
         timeout: Optional[float] = None,
         max_retries: Optional[int] = None,
         retry_delay: Optional[float] = None,
@@ -595,6 +596,7 @@ class CacheClient:
         
         Args:
             key: Cache key to delete
+            raise_on_missing: Raise CacheNotFoundError when key is missing
             
         Returns:
             True if key was deleted, False if key didn't exist
@@ -620,12 +622,20 @@ class CacheClient:
                 timeout=call_timeout,
                 metadata=call_metadata,
             )
-            success = response.status == "OK"
-            if success:
+            if response.status == "OK":
                 self.logger.debug("Successfully deleted key: %s", key)
-            else:
+                return True
+            if response.status == "NOT_FOUND":
                 self.logger.debug("Key not found for deletion: %s", key)
-            return success
+                if raise_on_missing:
+                    raise CacheNotFoundError(f"Key not found: {key}")
+                return False
+            self.logger.debug(
+                "Delete returned status %s for key: %s",
+                response.status,
+                key,
+            )
+            return False
             
         return await self._execute_with_retry(
             _delete_operation,

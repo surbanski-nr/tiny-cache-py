@@ -653,6 +653,18 @@ class TestCacheClientOperations:
         assert result is False
 
     @pytest.mark.asyncio
+    async def test_delete_not_found_raise(self, client_with_mock_stub):
+        """Test delete operation raising when key not found."""
+        client = client_with_mock_stub
+
+        mock_response = Mock()
+        mock_response.status = "NOT_FOUND"
+        client._stub.Delete.return_value = mock_response
+
+        with pytest.raises(CacheNotFoundError, match="Key not found: missing_key"):
+            await client.delete("missing_key", raise_on_missing=True)
+
+    @pytest.mark.asyncio
     async def test_stats_success(self, client_with_mock_stub):
         """Test successful stats operation."""
         client = client_with_mock_stub
