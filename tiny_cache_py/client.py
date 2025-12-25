@@ -128,7 +128,7 @@ class CacheClient:
         self._health_check_interval = health_check_interval
         self._health_check_timeout = health_check_timeout
         
-        self.logger.debug(f"Initialized CacheClient for {self.host}:{self.port}")
+        self.logger.debug("Initialized CacheClient for %s:%s", self.host, self.port)
 
     def _target(self) -> str:
         host = self.host
@@ -159,7 +159,7 @@ class CacheClient:
             return
 
         url = self._target()
-        self.logger.info(f"Connecting to cache service at {url}")
+        self.logger.info("Connecting to cache service at %s", url)
 
         if self.use_ssl:
             credentials = grpc.ssl_channel_credentials()
@@ -186,7 +186,7 @@ class CacheClient:
 
         self._stub = cache_pb2_grpc.CacheServiceStub(self._channel)
         self._closed = False
-        self.logger.info(f"Successfully connected to cache service at {url}")
+        self.logger.info("Successfully connected to cache service at %s", url)
 
     async def close(self) -> None:
         """Close connection to cache service"""
@@ -261,14 +261,16 @@ class CacheClient:
                 if e.code() == StatusCode.UNAVAILABLE:
                     if attempt < effective_max_retries:
                         self.logger.warning(
-                            f"Cache service unavailable, retrying ({attempt + 1}/{effective_max_retries})"
+                            "Cache service unavailable, retrying (%s/%s)",
+                            attempt + 1,
+                            effective_max_retries,
                         )
                         # Try to reconnect on unavailable error
                         try:
                             expected_channel = self._channel
                             await self._reconnect(expected_channel=expected_channel)
                         except Exception as reconnect_error:
-                            self.logger.warning(f"Reconnection attempt failed: {reconnect_error}")
+                            self.logger.warning("Reconnection attempt failed: %s", reconnect_error)
                         backoff = effective_retry_delay * (2 ** attempt)
                         await asyncio.sleep(random.uniform(0, backoff))
                         continue
@@ -277,7 +279,9 @@ class CacheClient:
                 elif e.code() == StatusCode.DEADLINE_EXCEEDED:
                     if attempt < effective_max_retries:
                         self.logger.warning(
-                            f"Request deadline exceeded, retrying ({attempt + 1}/{effective_max_retries})"
+                            "Request deadline exceeded, retrying (%s/%s)",
+                            attempt + 1,
+                            effective_max_retries,
                         )
                         backoff = effective_retry_delay * (2 ** attempt)
                         await asyncio.sleep(random.uniform(0, backoff))
@@ -287,27 +291,29 @@ class CacheClient:
                         f"Deadline exceeded after retries: {e.details()}"
                     ) from e
                 elif e.code() == StatusCode.INVALID_ARGUMENT:
-                    self.logger.error(f"Invalid argument error: {e.details()}")
+                    self.logger.error("Invalid argument error: %s", e.details())
                     raise CacheInvalidArgumentError(f"Invalid argument: {e.details()}") from e
                 elif e.code() == StatusCode.PERMISSION_DENIED:
-                    self.logger.error(f"Permission denied: {e.details()}")
+                    self.logger.error("Permission denied: %s", e.details())
                     raise CacheError(f"Permission denied: {e.details()}") from e
                 elif e.code() == StatusCode.UNAUTHENTICATED:
-                    self.logger.error(f"Unauthenticated: {e.details()}")
+                    self.logger.error("Unauthenticated: %s", e.details())
                     raise CacheError(f"Unauthenticated: {e.details()}") from e
                 elif e.code() == StatusCode.CANCELLED:
                     raise asyncio.CancelledError() from e
                 elif e.code() == StatusCode.RESOURCE_EXHAUSTED:
-                    self.logger.error(f"Cache resource exhausted: {e.details()}")
+                    self.logger.error("Cache resource exhausted: %s", e.details())
                     raise CacheError(f"Cache full: {e.details()}") from e
                 else:
-                    self.logger.error(f"Unexpected gRPC error {e.code()}: {e.details()}")
+                    self.logger.error("Unexpected gRPC error %s: %s", e.code(), e.details())
                     raise CacheError(f"gRPC error: {e.details()}") from e
             except asyncio.TimeoutError as e:
                 last_exception = CacheTimeoutError("Request timeout")
                 if attempt < effective_max_retries:
                     self.logger.warning(
-                        f"Request timeout, retrying ({attempt + 1}/{effective_max_retries})"
+                        "Request timeout, retrying (%s/%s)",
+                        attempt + 1,
+                        effective_max_retries,
                     )
                     backoff = effective_retry_delay * (2 ** attempt)
                     await asyncio.sleep(random.uniform(0, backoff))
@@ -347,7 +353,7 @@ class CacheClient:
         call_timeout = self.timeout if timeout is None else timeout
         if call_timeout <= 0:
             raise CacheValidationError("Timeout must be positive")
-        self.logger.debug(f"Getting value for key: {key}")
+        self.logger.debug("Getting value for key: %s", key)
         
         async def _get_operation():
             response = await self._stub.Get(
@@ -355,13 +361,13 @@ class CacheClient:
                 timeout=call_timeout,
             )
             if response.found:
-                self.logger.debug(f"Cache hit for key: {key}")
+                self.logger.debug("Cache hit for key: %s", key)
                 try:
                     return response.value.decode('utf-8')
                 except UnicodeDecodeError as e:
                     raise CacheError("Cache value is not valid UTF-8") from e
             else:
-                self.logger.debug(f"Cache miss for key: {key}")
+                self.logger.debug("Cache miss for key: %s", key)
             return None
             
         return await self._execute_with_retry(
@@ -385,7 +391,7 @@ class CacheClient:
         call_timeout = self.timeout if timeout is None else timeout
         if call_timeout <= 0:
             raise CacheValidationError("Timeout must be positive")
-        self.logger.debug(f"Getting raw value for key: {key}")
+        self.logger.debug("Getting raw value for key: %s", key)
 
         async def _get_operation():
             response = await self._stub.Get(
@@ -393,9 +399,9 @@ class CacheClient:
                 timeout=call_timeout,
             )
             if response.found:
-                self.logger.debug(f"Cache hit for key: {key}")
+                self.logger.debug("Cache hit for key: %s", key)
                 return response.value
-            self.logger.debug(f"Cache miss for key: {key}")
+            self.logger.debug("Cache miss for key: %s", key)
             return None
 
         return await self._execute_with_retry(
@@ -441,7 +447,7 @@ class CacheClient:
         elif ttl < 0:
             raise CacheValidationError("TTL must be non-negative")
         
-        self.logger.debug(f"Setting value for key: {key}, ttl: {ttl}")
+        self.logger.debug("Setting value for key: %s, ttl: %s", key, ttl)
         
         async def _set_operation():
             response = await self._stub.Set(
@@ -454,7 +460,7 @@ class CacheClient:
             )
             success = response.status == "OK"
             if success:
-                self.logger.debug(f"Successfully set value for key: {key}")
+                self.logger.debug("Successfully set value for key: %s", key)
             return success
             
         return await self._execute_with_retry(
@@ -495,7 +501,7 @@ class CacheClient:
         elif ttl < 0:
             raise CacheValidationError("TTL must be non-negative")
 
-        self.logger.debug(f"Setting raw value for key: {key}, ttl: {ttl}")
+        self.logger.debug("Setting raw value for key: %s, ttl: %s", key, ttl)
 
         async def _set_operation():
             response = await self._stub.Set(
@@ -508,7 +514,7 @@ class CacheClient:
             )
             success = response.status == "OK"
             if success:
-                self.logger.debug(f"Successfully set raw value for key: {key}")
+                self.logger.debug("Successfully set raw value for key: %s", key)
             return success
 
         return await self._execute_with_retry(
@@ -543,7 +549,7 @@ class CacheClient:
         call_timeout = self.timeout if timeout is None else timeout
         if call_timeout <= 0:
             raise CacheValidationError("Timeout must be positive")
-        self.logger.debug(f"Deleting key: {key}")
+        self.logger.debug("Deleting key: %s", key)
         
         async def _delete_operation():
             response = await self._stub.Delete(
@@ -552,9 +558,9 @@ class CacheClient:
             )
             success = response.status == "OK"
             if success:
-                self.logger.debug(f"Successfully deleted key: {key}")
+                self.logger.debug("Successfully deleted key: %s", key)
             else:
-                self.logger.debug(f"Key not found for deletion: {key}")
+                self.logger.debug("Key not found for deletion: %s", key)
             return success
             
         return await self._execute_with_retry(
@@ -596,7 +602,7 @@ class CacheClient:
                 "misses": response.misses,
                 "hit_rate": response.hits / (response.hits + response.misses) if (response.hits + response.misses) > 0 else 0
             }
-            self.logger.debug(f"Retrieved cache stats: {stats}")
+            self.logger.debug("Retrieved cache stats: %s", stats)
             return stats
             
         return await self._execute_with_retry(
@@ -621,7 +627,7 @@ class CacheClient:
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            self.logger.debug(f"Ping failed: {e}")
+            self.logger.debug("Ping failed: %s", e)
             return False
 
     def is_connected(self) -> bool:
@@ -657,7 +663,7 @@ class CacheClient:
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            self.logger.warning(f"Health check failed: {e}")
+            self.logger.warning("Health check failed: %s", e)
             return False
     
     async def _ensure_connection(self) -> None:
@@ -702,5 +708,5 @@ class CacheClient:
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            self.logger.error(f"Failed to reconnect: {e}")
+            self.logger.error("Failed to reconnect: %s", e)
             raise CacheConnectionError(f"Reconnection failed: {e}") from e
