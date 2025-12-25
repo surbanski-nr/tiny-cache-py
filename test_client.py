@@ -1,7 +1,5 @@
 import asyncio
-import sys
 import logging
-sys.path.insert(0, '.')
 
 from tiny_cache_py import CacheClient, CacheError, CacheConnectionError
 
