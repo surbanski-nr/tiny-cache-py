@@ -7,8 +7,18 @@ Run the server first: cd ../tiny-cache && python server.py
 
 import asyncio
 import pytest
+import socket
 import time
 from tiny_cache_py import CacheClient, CacheConnectionError, CacheValidationError
+
+
+@pytest.fixture(scope="session", autouse=True)
+def require_running_server():
+    try:
+        with socket.create_connection(("127.0.0.1", 50051), timeout=0.5):
+            return
+    except OSError:
+        pytest.skip("tiny-cache server is not running on localhost:50051")
 
 
 @pytest.mark.integration
