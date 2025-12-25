@@ -85,6 +85,14 @@ except CacheTimeoutError:
     print("Request timed out")
 ```
 
+### Metadata (Correlation IDs)
+
+Pass gRPC metadata per call (or set `default_metadata` on the client) to carry correlation IDs:
+
+```python
+await client.get("key", metadata=[("x-correlation-id", "req-123")])
+```
+
 ## Development
 
 ### Setup

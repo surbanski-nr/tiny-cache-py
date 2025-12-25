@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import random
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any, Union, Sequence, Tuple
 import grpc
 from grpc import StatusCode
 from . import cache_pb2
@@ -55,6 +55,7 @@ class CacheClient:
         logger: Optional[logging.Logger] = None,
         health_check_interval: Optional[float] = 30.0,
         health_check_timeout: float = 5.0,
+        default_metadata: Optional[Sequence[Tuple[str, str]]] = None,
     ):
         """
         Initialize cache client.
@@ -69,6 +70,7 @@ class CacheClient:
             use_ssl: Whether to use SSL/TLS connection
             health_check_interval: Seconds between health checks (set to 0/None to disable)
             health_check_timeout: Health check timeout in seconds
+            default_metadata: Default gRPC metadata for all calls
         """
         address = server_address.strip()
         if not address:
@@ -113,6 +115,7 @@ class CacheClient:
         self.retry_delay = retry_delay
         self.use_ssl = use_ssl
         self.logger = logger or logging.getLogger(__name__)
+        self._default_metadata = tuple(default_metadata) if default_metadata else None
         
         self._channel: Optional[grpc.aio.Channel] = None
         self._stub: Optional[cache_pb2_grpc.CacheServiceStub] = None
@@ -133,6 +136,17 @@ class CacheClient:
         if ":" in host:
             host = f"[{host}]"
         return f"{host}:{self.port}"
+
+    def _merge_metadata(
+        self,
+        metadata: Optional[Sequence[Tuple[str, str]]],
+    ) -> Optional[Tuple[Tuple[str, str], ...]]:
+        if metadata is None:
+            return self._default_metadata
+        extra = tuple(metadata)
+        if self._default_metadata is None:
+            return extra
+        return (*self._default_metadata, *extra)
 
     async def __aenter__(self):
         await self.connect()
@@ -332,6 +346,7 @@ class CacheClient:
         timeout: Optional[float] = None,
         max_retries: Optional[int] = None,
         retry_delay: Optional[float] = None,
+        metadata: Optional[Sequence[Tuple[str, str]]] = None,
     ) -> Optional[str]:
         """
         Get value from cache.
@@ -351,12 +366,14 @@ class CacheClient:
         call_timeout = self.timeout if timeout is None else timeout
         if call_timeout <= 0:
             raise CacheValidationError("Timeout must be positive")
+        call_metadata = self._merge_metadata(metadata)
         self.logger.debug("Getting value for key: %s", key)
         
         async def _get_operation():
             response = await self._stub.Get(
                 cache_pb2.CacheKey(key=key),
                 timeout=call_timeout,
+                metadata=call_metadata,
             )
             if response.found:
                 self.logger.debug("Cache hit for key: %s", key)
@@ -381,6 +398,7 @@ class CacheClient:
         timeout: Optional[float] = None,
         max_retries: Optional[int] = None,
         retry_delay: Optional[float] = None,
+        metadata: Optional[Sequence[Tuple[str, str]]] = None,
     ) -> Optional[bytes]:
         """
         Get raw bytes value from cache.
@@ -389,12 +407,14 @@ class CacheClient:
         call_timeout = self.timeout if timeout is None else timeout
         if call_timeout <= 0:
             raise CacheValidationError("Timeout must be positive")
+        call_metadata = self._merge_metadata(metadata)
         self.logger.debug("Getting raw value for key: %s", key)
 
         async def _get_operation():
             response = await self._stub.Get(
                 cache_pb2.CacheKey(key=key),
                 timeout=call_timeout,
+                metadata=call_metadata,
             )
             if response.found:
                 self.logger.debug("Cache hit for key: %s", key)
@@ -417,6 +437,7 @@ class CacheClient:
         timeout: Optional[float] = None,
         max_retries: Optional[int] = None,
         retry_delay: Optional[float] = None,
+        metadata: Optional[Sequence[Tuple[str, str]]] = None,
     ) -> bool:
         """
         Set value in cache.
@@ -439,6 +460,7 @@ class CacheClient:
         call_timeout = self.timeout if timeout is None else timeout
         if call_timeout <= 0:
             raise CacheValidationError("Timeout must be positive")
+        call_metadata = self._merge_metadata(metadata)
         
         if ttl is None:
             ttl = self.default_ttl
@@ -455,6 +477,7 @@ class CacheClient:
                     ttl=ttl,
                 ),
                 timeout=call_timeout,
+                metadata=call_metadata,
             )
             success = response.status == "OK"
             if success:
@@ -476,6 +499,7 @@ class CacheClient:
         timeout: Optional[float] = None,
         max_retries: Optional[int] = None,
         retry_delay: Optional[float] = None,
+        metadata: Optional[Sequence[Tuple[str, str]]] = None,
     ) -> bool:
         """
         Store raw bytes value in cache.
@@ -487,6 +511,7 @@ class CacheClient:
         call_timeout = self.timeout if timeout is None else timeout
         if call_timeout <= 0:
             raise CacheValidationError("Timeout must be positive")
+        call_metadata = self._merge_metadata(metadata)
         if value is None:
             raise CacheValidationError("Value cannot be None")
         if not isinstance(value, (bytes, bytearray, memoryview)):
@@ -509,6 +534,7 @@ class CacheClient:
                     ttl=ttl,
                 ),
                 timeout=call_timeout,
+                metadata=call_metadata,
             )
             success = response.status == "OK"
             if success:
@@ -528,6 +554,7 @@ class CacheClient:
         timeout: Optional[float] = None,
         max_retries: Optional[int] = None,
         retry_delay: Optional[float] = None,
+        metadata: Optional[Sequence[Tuple[str, str]]] = None,
     ) -> bool:
         """
         Delete key from cache.
@@ -547,12 +574,14 @@ class CacheClient:
         call_timeout = self.timeout if timeout is None else timeout
         if call_timeout <= 0:
             raise CacheValidationError("Timeout must be positive")
+        call_metadata = self._merge_metadata(metadata)
         self.logger.debug("Deleting key: %s", key)
         
         async def _delete_operation():
             response = await self._stub.Delete(
                 cache_pb2.CacheKey(key=key),
                 timeout=call_timeout,
+                metadata=call_metadata,
             )
             success = response.status == "OK"
             if success:
@@ -573,6 +602,7 @@ class CacheClient:
         timeout: Optional[float] = None,
         max_retries: Optional[int] = None,
         retry_delay: Optional[float] = None,
+        metadata: Optional[Sequence[Tuple[str, str]]] = None,
     ) -> Dict[str, Any]:
         """
         Get cache statistics.
@@ -588,11 +618,13 @@ class CacheClient:
         call_timeout = self.timeout if timeout is None else timeout
         if call_timeout <= 0:
             raise CacheValidationError("Timeout must be positive")
+        call_metadata = self._merge_metadata(metadata)
         
         async def _stats_operation():
             response = await self._stub.Stats(
                 cache_pb2.Empty(),
                 timeout=call_timeout,
+                metadata=call_metadata,
             )
             stats = {
                 "size": response.size,
@@ -609,7 +641,7 @@ class CacheClient:
             retry_delay=retry_delay,
         )
 
-    async def ping(self) -> bool:
+    async def ping(self, *, metadata: Optional[Sequence[Tuple[str, str]]] = None) -> bool:
         """
         Check if cache service is available.
         
@@ -617,9 +649,10 @@ class CacheClient:
             True if service is available
         """
         self.logger.debug("Pinging cache service")
+        call_metadata = self._merge_metadata(metadata)
         try:
             # Use direct gRPC call to avoid retry logic
-            await self._stub.Stats(cache_pb2.Empty(), timeout=5.0)
+            await self._stub.Stats(cache_pb2.Empty(), timeout=5.0, metadata=call_metadata)
             self.logger.debug("Ping successful")
             return True
         except asyncio.CancelledError:
@@ -655,7 +688,11 @@ class CacheClient:
             
         try:
             # Use a direct gRPC call without retry logic to avoid infinite recursion
-            await self._stub.Stats(cache_pb2.Empty(), timeout=self._health_check_timeout)
+            await self._stub.Stats(
+                cache_pb2.Empty(),
+                timeout=self._health_check_timeout,
+                metadata=self._default_metadata,
+            )
             self._last_health_check = current_time
             return True
         except asyncio.CancelledError:

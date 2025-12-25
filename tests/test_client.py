@@ -433,6 +433,32 @@ class TestCacheClientOperations:
         assert client._stub.Get.call_args.kwargs["timeout"] == 1.23
 
     @pytest.mark.asyncio
+    async def test_get_passes_metadata(self):
+        """Test get passes merged gRPC metadata."""
+        client = CacheClient(
+            "localhost:50051",
+            default_metadata=[("x-default", "1")],
+        )
+        client._stub = AsyncMock()
+        client._channel = AsyncMock()
+
+        mock_response = Mock()
+        mock_response.found = True
+        mock_response.value = b"test_value"
+        client._stub.Get.return_value = mock_response
+
+        result = await client.get(
+            "test_key",
+            metadata=[("x-correlation-id", "abc")],
+        )
+
+        assert result == "test_value"
+        assert client._stub.Get.call_args.kwargs["metadata"] == (
+            ("x-default", "1"),
+            ("x-correlation-id", "abc"),
+        )
+
+    @pytest.mark.asyncio
     async def test_get_invalid_utf8_raises(self, client_with_mock_stub):
         """Test get operation raises when value is not valid UTF-8."""
         client = client_with_mock_stub
