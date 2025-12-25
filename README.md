@@ -55,7 +55,7 @@ asyncio.run(main())
 - `get_bytes(key: str) → Optional[bytes]`: Retrieve cached raw bytes
 - `set(key: str, value: Any, ttl: Optional[int]) → bool`: Store value with optional TTL (seconds; `None` uses default, `0` disables expiry)
 - `set_bytes(key: str, value: bytes, ttl: Optional[int]) → bool`: Store raw bytes with optional TTL
-- `delete(key: str, raise_on_missing: bool = False) → bool`: Remove cached entry
+- `delete(key: str) → bool`: Remove cached entry (idempotent)
 - `stats() → Dict[str, Any]`: Get cache statistics
 - `ping() → bool`: Check server availability
 

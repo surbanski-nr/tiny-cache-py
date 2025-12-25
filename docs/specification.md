@@ -7,19 +7,28 @@ This document describes the behavior of the current `CacheClient` implementation
 `CacheClient` defaults:
 
 - `server_address`: `"localhost:50051"`
-- `timeout`: `30.0` seconds (per operation; implemented via `asyncio.wait_for`)
+- `timeout`: `30.0` seconds (per RPC deadline via gRPC `timeout=...`)
+- `connect_timeout`: `None` (when set, `connect()` waits for channel readiness up to this deadline)
 - `max_retries`: `3` (total attempts = `max_retries + 1`)
-- `retry_delay`: `1.0` seconds (exponential backoff multiplier)
+- `retry_delay`: `1.0` seconds (base delay; exponential backoff with jitter)
 - `default_ttl`: `3600` seconds
 - `use_ssl`: `False`
+- `health_check_interval`: `30.0` seconds (set to `0`/`None` to disable)
+- `health_check_timeout`: `5.0` seconds
+- `default_metadata`: `None`
 
 ## Connection lifecycle
 
-- `await client.connect()` creates a single async gRPC channel and stub.
+- `await client.connect()` is concurrency-safe and reuses a single async gRPC channel and stub.
 - `await client.close()` closes the channel, clears stub references, and marks the client as closed.
 - `async with CacheClient(...) as client:` calls `connect()` on enter and `close()` on exit.
 
 ## Input validation
+
+### Server address parsing
+
+- Supports `grpc://host:port` (forces insecure channel) and `grpcs://host:port` (forces TLS) prefixes.
+- Supports bracket-form IPv6 targets like `[::1]:50051`.
 
 ### Key validation
 
@@ -38,17 +47,35 @@ This document describes the behavior of the current `CacheClient` implementation
 - `bytes` are decoded as UTF-8; invalid UTF-8 raises `CacheValidationError`
 - Other objects convert via `str(value)` (conversion failures raise `CacheValidationError`)
 
+Binary values are supported via dedicated methods:
+
+- `get_bytes(...)` returns raw bytes without decoding
+- `set_bytes(...)` stores bytes-like values without UTF-8 encoding
+
 ## Operations
 
-### `get(key) -> Optional[str]`
+All RPC-like methods accept per-call overrides:
+
+- `timeout`: overrides the client default RPC deadline (must be positive)
+- `max_retries` / `retry_delay`: override the retry budget/backoff
+- `metadata`: extra gRPC metadata tuples (merged with `default_metadata`)
+
+### `get(key, ...) -> Optional[str]`
 
 - Validates `key`.
 - Calls `CacheService.Get`.
 - If `found == false`, returns `None`.
-- If `found == true`, attempts to decode the returned bytes as UTF-8.
-  - On decode failure, the current implementation returns the raw bytes even though the return type annotation says `Optional[str]`.
+- If `found == true`, decodes the returned bytes as UTF-8 and returns `str`.
+  - On decode failure, raises `CacheError`.
 
-### `set(key, value, ttl=None) -> bool`
+### `get_bytes(key, ...) -> Optional[bytes]`
+
+- Validates `key`.
+- Calls `CacheService.Get`.
+- If `found == false`, returns `None`.
+- If `found == true`, returns the raw `bytes` value without decoding.
+
+### `set(key, value, ttl=None, ...) -> bool`
 
 - Validates `key` and converts `value` to `str` then encodes it as UTF-8 bytes.
 - TTL behavior:
@@ -56,35 +83,44 @@ This document describes the behavior of the current `CacheClient` implementation
   - If `ttl == 0`, the server treats it as "no expiration".
   - If `ttl < 0`, raises `CacheValidationError`.
 - Calls `CacheService.Set`.
-- Returns `True` iff `CacheResponse.status == "OK"`.
+- Returns `True` iff `CacheResponse.status == CacheStatus.OK`.
 
-### `delete(key) -> bool`
+### `set_bytes(key, value, ttl=None, ...) -> bool`
+
+- Validates `key`.
+- Validates `value` is `bytes`, `bytearray`, or `memoryview` and stores the raw bytes.
+- TTL behavior matches `set(...)`.
+- Calls `CacheService.Set`.
+- Returns `True` iff `CacheResponse.status == CacheStatus.OK`.
+
+### `delete(key, ...) -> bool`
 
 - Validates `key`.
 - Calls `CacheService.Delete`.
-- Returns `True` iff `CacheResponse.status == "OK"`, otherwise `False`.
+- Delete is idempotent: the reference server responds with `CacheStatus.OK` even when the key is missing.
+- Returns `True` iff `CacheResponse.status == CacheStatus.OK`.
 
-### `stats() -> Dict[str, Any]`
+### `stats(...) -> Dict[str, Any]`
 
 - Calls `CacheService.Stats`.
-- Returns:
-  - `size`, `hits`, `misses` from the proto response
-  - `hit_rate` computed as `hits / (hits + misses)` (or `0` when both are `0`)
+- Returns a `dict` containing:
+  - `size`, `hits`, `misses`, `evictions`, `hit_rate`
+  - `memory_usage_bytes`, `max_memory_bytes`, `max_items`
 
-### `ping() -> bool`
+### `ping(...) -> bool`
 
-- Calls `CacheService.Stats` with a short timeout and returns `True` on success.
+- Ensures a connection exists, then calls `CacheService.Stats` with a short timeout and returns `True` on success.
 - Returns `False` on any exception.
 
 ## Retries, timeouts, and reconnection
 
-- Each high-level operation (`get`, `set`, `delete`, `stats`) uses `_execute_with_retry(...)`.
+- Each high-level operation (`get`, `get_bytes`, `set`, `set_bytes`, `delete`, `stats`) uses `_execute_with_retry(...)`.
 - `_execute_with_retry`:
   - Ensures a connection exists (and runs a periodic health check).
-  - Wraps the operation coroutine in `asyncio.wait_for(..., timeout=self.timeout)`.
   - Retries on:
-    - `grpc.StatusCode.UNAVAILABLE` (with reconnection attempt + backoff)
-    - `asyncio.TimeoutError` (with backoff)
+    - `grpc.StatusCode.UNAVAILABLE` (with reconnection attempt + jittered exponential backoff)
+    - `grpc.StatusCode.DEADLINE_EXCEEDED` (with backoff)
+  - Propagates cancellation (`asyncio.CancelledError`) without wrapping.
   - Maps some gRPC status codes to custom exceptions.
 
 ## Error model
@@ -94,3 +130,4 @@ This document describes the behavior of the current `CacheClient` implementation
 - `CacheTimeoutError`: operation timed out after retries
 - `CacheInvalidArgumentError`: maps `grpc.StatusCode.INVALID_ARGUMENT`
 - `CacheError`: all other unexpected failures (generic wrapper)
+

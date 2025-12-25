@@ -16,6 +16,8 @@ This repository is a client library, not a backend service. There is no frontend
 - `tiny_cache_py/`
   - `tiny_cache_py/client.py`: the main `CacheClient` implementation and custom exceptions
   - `tiny_cache_py/__init__.py`: package exports
+  - `tiny_cache_py/cache_pb2*.py`: generated gRPC client code (checked in)
+  - `tiny_cache_py/cache_pb2*.pyi`, `tiny_cache_py/py.typed`: typing support for downstream users
 - `cache.proto`: the gRPC service contract used by the client (source proto)
 - `tests/`
   - `tests/test_client.py`: unit-style tests (mostly stubbed gRPC calls)
@@ -23,17 +25,19 @@ This repository is a client library, not a backend service. There is no frontend
   - `tests/benchmark_client.py`: a benchmark script (requires a running server)
 - Tooling/config:
   - `pyproject.toml`, `setup.py`, `requirements*.txt`
-  - `Makefile`, `pytest.ini`, `mypy.ini`, `.gitignore`
+  - `Makefile`, `.gitignore`, `scripts/`
 
 ## Generated gRPC code
 
 The client imports `tiny_cache_py.cache_pb2` and `tiny_cache_py.cache_pb2_grpc`. These are generated from the `.proto` (typically via `make proto`).
 
+The repo also provides `make proto-check` to verify the checked-in generated files match `cache.proto`.
+
 ## Primary runtime entry point
 
 `tiny_cache_py/client.py` defines:
 
-- `CacheClient`: async gRPC client with `get`, `set`, `delete`, `stats`, `ping`
+- `CacheClient`: async gRPC client with `get`, `get_bytes`, `set`, `set_bytes`, `delete`, `stats`, `ping`
 - Exceptions: `CacheError` (base) and more specific subclasses used by the client
 
 The `CacheClient` currently owns several responsibilities in one module:
@@ -51,8 +55,7 @@ The `CacheClient` currently owns several responsibilities in one module:
 ## Tooling
 
 - Formatting: `black` (configured in `pyproject.toml`)
-- Type checking: `mypy` (configured in `pyproject.toml` and `mypy.ini`)
-- Testing: `pytest` (configured in `pyproject.toml` and `pytest.ini`)
+- Type checking: `mypy` (configured in `pyproject.toml`)
+- Testing: `pytest` (configured in `pyproject.toml`)
 
 See `docs/code-review.md` for improvement opportunities and gaps between config, docs, and behavior.
-
