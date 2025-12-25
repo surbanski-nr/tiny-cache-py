@@ -238,10 +238,7 @@ class CacheClient:
         
         for attempt in range(self.max_retries + 1):
             try:
-                return await asyncio.wait_for(
-                    operation(*args, **kwargs),
-                    timeout=self.timeout
-                )
+                return await operation(*args, **kwargs)
             except asyncio.CancelledError:
                 raise
             except grpc.RpcError as e:
@@ -260,8 +257,16 @@ class CacheClient:
                     self.logger.error("Cache service unavailable after all retries")
                     raise CacheConnectionError("Cache service unavailable after retries") from e
                 elif e.code() == StatusCode.DEADLINE_EXCEEDED:
-                    self.logger.error(f"Request deadline exceeded: {e.details()}")
-                    raise CacheTimeoutError(f"Deadline exceeded: {e.details()}") from e
+                    if attempt < self.max_retries:
+                        self.logger.warning(
+                            f"Request deadline exceeded, retrying ({attempt + 1}/{self.max_retries})"
+                        )
+                        await asyncio.sleep(self.retry_delay * (2 ** attempt))  # Exponential backoff
+                        continue
+                    self.logger.error("Request deadline exceeded after all retries")
+                    raise CacheTimeoutError(
+                        f"Deadline exceeded after retries: {e.details()}"
+                    ) from e
                 elif e.code() == StatusCode.INVALID_ARGUMENT:
                     self.logger.error(f"Invalid argument error: {e.details()}")
                     raise CacheInvalidArgumentError(f"Invalid argument: {e.details()}") from e
@@ -313,7 +318,10 @@ class CacheClient:
         self.logger.debug(f"Getting value for key: {key}")
         
         async def _get_operation():
-            response = await self._stub.Get(cache_pb2.CacheKey(key=key))
+            response = await self._stub.Get(
+                cache_pb2.CacheKey(key=key),
+                timeout=self.timeout,
+            )
             if response.found:
                 self.logger.debug(f"Cache hit for key: {key}")
                 try:
@@ -334,7 +342,10 @@ class CacheClient:
         self.logger.debug(f"Getting raw value for key: {key}")
 
         async def _get_operation():
-            response = await self._stub.Get(cache_pb2.CacheKey(key=key))
+            response = await self._stub.Get(
+                cache_pb2.CacheKey(key=key),
+                timeout=self.timeout,
+            )
             if response.found:
                 self.logger.debug(f"Cache hit for key: {key}")
                 return response.value
@@ -376,11 +387,14 @@ class CacheClient:
         self.logger.debug(f"Setting value for key: {key}, ttl: {ttl}")
         
         async def _set_operation():
-            response = await self._stub.Set(cache_pb2.CacheItem(
-                key=key,
-                value=validated_value.encode('utf-8'),
-                ttl=ttl
-            ))
+            response = await self._stub.Set(
+                cache_pb2.CacheItem(
+                    key=key,
+                    value=validated_value.encode('utf-8'),
+                    ttl=ttl,
+                ),
+                timeout=self.timeout,
+            )
             success = response.status == "OK"
             if success:
                 self.logger.debug(f"Successfully set value for key: {key}")
@@ -421,7 +435,8 @@ class CacheClient:
                     key=key,
                     value=value_bytes,
                     ttl=ttl,
-                )
+                ),
+                timeout=self.timeout,
             )
             success = response.status == "OK"
             if success:
@@ -449,7 +464,10 @@ class CacheClient:
         self.logger.debug(f"Deleting key: {key}")
         
         async def _delete_operation():
-            response = await self._stub.Delete(cache_pb2.CacheKey(key=key))
+            response = await self._stub.Delete(
+                cache_pb2.CacheKey(key=key),
+                timeout=self.timeout,
+            )
             success = response.status == "OK"
             if success:
                 self.logger.debug(f"Successfully deleted key: {key}")
@@ -473,7 +491,10 @@ class CacheClient:
         self.logger.debug("Requesting cache statistics")
         
         async def _stats_operation():
-            response = await self._stub.Stats(cache_pb2.Empty())
+            response = await self._stub.Stats(
+                cache_pb2.Empty(),
+                timeout=self.timeout,
+            )
             stats = {
                 "size": response.size,
                 "hits": response.hits,
@@ -495,10 +516,7 @@ class CacheClient:
         self.logger.debug("Pinging cache service")
         try:
             # Use direct gRPC call to avoid retry logic
-            await asyncio.wait_for(
-                self._stub.Stats(cache_pb2.Empty()),
-                timeout=5.0
-            )
+            await self._stub.Stats(cache_pb2.Empty(), timeout=5.0)
             self.logger.debug("Ping successful")
             return True
         except asyncio.CancelledError:
@@ -534,10 +552,7 @@ class CacheClient:
             
         try:
             # Use a direct gRPC call without retry logic to avoid infinite recursion
-            response = await asyncio.wait_for(
-                self._stub.Stats(cache_pb2.Empty()),
-                timeout=self._health_check_timeout,
-            )
+            await self._stub.Stats(cache_pb2.Empty(), timeout=self._health_check_timeout)
             self._last_health_check = current_time
             return True
         except asyncio.CancelledError:
