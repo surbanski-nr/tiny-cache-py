@@ -35,4 +35,4 @@ The `CacheClient` methods map to the RPCs as follows:
 
 - The contract represents values as raw `bytes`, but the current client API is primarily string-oriented (it encodes values as UTF-8). If the client should support binary values end-to-end, the Python API should expose `bytes` explicitly or provide a serializer interface.
 - `CacheResponse.status` is a free-form string, not an enum. Both client and server need to agree on the exact values and meaning.
-
+- The client currently uses `Stats` for connection health checking because the server does not expose the standard gRPC Health Checking Protocol.
