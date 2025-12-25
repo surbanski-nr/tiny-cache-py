@@ -18,29 +18,15 @@ import grpc
 from grpc import StatusCode
 from . import cache_pb2
 from . import cache_pb2_grpc
+from .errors import (
+    CacheError,
+    CacheConnectionError,
+    CacheInvalidArgumentError,
+    CacheTimeoutError,
+    CacheValidationError,
+)
 
 T = TypeVar("T")
-
-
-class CacheError(Exception):
-    """Base exception for cache operations"""
-    pass
-
-class CacheConnectionError(CacheError):
-    """Raised when cache service is unavailable"""
-    pass
-
-class CacheValidationError(CacheError):
-    """Raised when input validation fails"""
-    pass
-
-class CacheTimeoutError(CacheError):
-    """Raised when request times out"""
-    pass
-
-class CacheInvalidArgumentError(CacheError):
-    """Raised when invalid arguments are provided"""
-    pass
 
 class CacheClient:
     """
