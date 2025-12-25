@@ -50,6 +50,7 @@ class CacheClient:
         max_retries: int = 3,
         retry_delay: float = 1.0,
         timeout: float = 30.0,
+        connect_timeout: Optional[float] = None,
         default_ttl: int = 3600,
         use_ssl: bool = False,
         logger: Optional[logging.Logger] = None
@@ -62,6 +63,7 @@ class CacheClient:
             max_retries: Maximum number of retry attempts for failed requests
             retry_delay: Initial delay between retries (exponential backoff)
             timeout: Request timeout in seconds
+            connect_timeout: Optional channel readiness timeout in seconds
             default_ttl: Default TTL for cache entries
             use_ssl: Whether to use SSL/TLS connection
         """
@@ -102,6 +104,7 @@ class CacheClient:
         if not (1 <= self.port <= 65535):
             raise CacheValidationError("Server port must be between 1 and 65535")
         self.timeout = timeout
+        self.connect_timeout = connect_timeout
         self.default_ttl = default_ttl
         self.max_retries = max_retries
         self.retry_delay = retry_delay
@@ -155,6 +158,19 @@ class CacheClient:
         else:
             self._channel = grpc.aio.insecure_channel(url)
             self.logger.debug("Using insecure connection")
+
+        if self.connect_timeout is not None:
+            try:
+                await asyncio.wait_for(
+                    self._channel.channel_ready(),
+                    timeout=self.connect_timeout,
+                )
+            except Exception as e:
+                await self._channel.close()
+                self._channel = None
+                raise CacheConnectionError(
+                    f"Channel not ready within {self.connect_timeout} seconds"
+                ) from e
 
         self._stub = cache_pb2_grpc.CacheServiceStub(self._channel)
         self._closed = False

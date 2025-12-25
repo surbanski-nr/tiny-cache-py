@@ -194,6 +194,40 @@ class TestCacheClientConnection:
             mock_stub.assert_called_once_with(mock_channel_instance)
 
     @pytest.mark.asyncio
+    async def test_connect_waits_for_channel_ready(self):
+        """Test connect waits for channel readiness when configured."""
+        client = CacheClient("localhost:50051", use_ssl=False, connect_timeout=1.0)
+
+        with patch('grpc.aio.insecure_channel') as mock_channel, \
+             patch('tiny_cache_py.cache_pb2_grpc.CacheServiceStub') as mock_stub:
+            mock_channel_instance = AsyncMock()
+            mock_channel_instance.channel_ready = AsyncMock()
+            mock_channel.return_value = mock_channel_instance
+            mock_stub.return_value = Mock()
+
+            await client.connect()
+
+            mock_channel_instance.channel_ready.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_connect_channel_ready_timeout(self):
+        """Test connect raises when channel is not ready in time."""
+        client = CacheClient("localhost:50051", use_ssl=False, connect_timeout=0.1)
+
+        with patch('grpc.aio.insecure_channel') as mock_channel, \
+             patch('tiny_cache_py.cache_pb2_grpc.CacheServiceStub') as mock_stub:
+            mock_channel_instance = AsyncMock()
+            mock_channel_instance.channel_ready = AsyncMock(side_effect=asyncio.TimeoutError())
+            mock_channel_instance.close = AsyncMock()
+            mock_channel.return_value = mock_channel_instance
+            mock_stub.return_value = Mock()
+
+            with pytest.raises(CacheConnectionError, match="Channel not ready"):
+                await client.connect()
+
+            mock_channel_instance.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
     async def test_connect_secure(self):
         """Test secure connection establishment."""
         client = CacheClient("localhost:50051", use_ssl=True)
