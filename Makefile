@@ -19,17 +19,12 @@ install: ## Install package in development mode
 	$(PIP) install -e .
 
 # Protocol buffer generation
-proto: ## Generate protobuf files from server's cache.proto
-	@echo "Generating protobuf files from server..."
-	@if [ ! -f "../tiny-cache/cache.proto" ]; then \
-		echo "Error: Server protobuf file not found at ../tiny-cache/cache.proto"; \
-		echo "Please ensure the tiny-cache server project is in the parent directory"; \
-		exit 1; \
-	fi
-	$(PROTOC) -I../tiny-cache --python_out=tiny_cache_py/ --grpc_python_out=tiny_cache_py/ ../tiny-cache/cache.proto
+proto: ## Generate protobuf files from this repo's cache.proto
+	@echo "Generating protobuf files from cache.proto..."
+	$(PROTOC) -I. --python_out=tiny_cache_py/ --grpc_python_out=tiny_cache_py/ cache.proto
 	@echo "Fixing protobuf imports..."
 	sed -i 's/^import cache_pb2/from . import cache_pb2/' tiny_cache_py/cache_pb2_grpc.py
-	@echo "Protobuf files generated successfully from server"
+	@echo "Protobuf files generated successfully"
 
 gen: proto ## Alias for proto target
 
