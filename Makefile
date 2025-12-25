@@ -26,6 +26,14 @@ proto: ## Generate protobuf files from this repo's cache.proto
 	$(PYTHON) scripts/fix_protoc_imports.py tiny_cache_py/cache_pb2_grpc.py
 	@echo "Protobuf files generated successfully"
 
+proto-check: ## Verify generated protobuf files are up to date
+	@tmpdir=$$(mktemp -d); \
+	trap 'rm -rf "$$tmpdir"' EXIT; \
+	$(PROTOC) -I. --python_out="$$tmpdir" --grpc_python_out="$$tmpdir" cache.proto; \
+	$(PYTHON) scripts/fix_protoc_imports.py "$$tmpdir/cache_pb2_grpc.py"; \
+	diff -u tiny_cache_py/cache_pb2.py "$$tmpdir/cache_pb2.py"; \
+	diff -u tiny_cache_py/cache_pb2_grpc.py "$$tmpdir/cache_pb2_grpc.py"
+
 gen: proto ## Alias for proto target
 
 # Testing
@@ -65,4 +73,4 @@ clean: ## Clean generated files
 # Development workflow
 dev: setup proto test ## Complete development setup and test
 
-.PHONY: help setup install proto gen test test-unit test-integration test-coverage benchmark lint format format-check quality clean dev
+.PHONY: help setup install proto proto-check gen test test-unit test-integration test-coverage benchmark lint format format-check quality clean dev

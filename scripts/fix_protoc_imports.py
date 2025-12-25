@@ -4,7 +4,7 @@ from pathlib import Path
 
 
 _CACHE_PB2_IMPORT_RE = re.compile(
-    r"^import cache_pb2(\\s+as\\s+(?P<alias>\\w+))?$",
+    r"^import cache_pb2(\s+as\s+(?P<alias>\w+))?$",
     re.MULTILINE,
 )
 
