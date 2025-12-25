@@ -735,6 +735,33 @@ class TestCacheClientErrorHandling:
         assert client._stub.Get.call_count == 3
 
     @pytest.mark.asyncio
+    async def test_retry_backoff_uses_jitter(self, client_with_mock_stub):
+        """Test retry backoff sleeps use jitter."""
+        client = client_with_mock_stub
+        client._stub.Get.side_effect = [
+            asyncio.TimeoutError(),
+            asyncio.TimeoutError(),
+            asyncio.TimeoutError(),
+        ]
+
+        async_sleep = AsyncMock()
+
+        with patch("tiny_cache_py.client.random.uniform", side_effect=lambda low, high: high) as mock_uniform, \
+             patch("tiny_cache_py.client.asyncio.sleep", async_sleep):
+            with pytest.raises(CacheTimeoutError, match="Request timeout after retries"):
+                await client.get("test_key")
+
+        low0, high0 = mock_uniform.call_args_list[0].args
+        low1, high1 = mock_uniform.call_args_list[1].args
+        assert low0 == 0
+        assert high0 == pytest.approx(0.1)
+        assert low1 == 0
+        assert high1 == pytest.approx(0.2)
+
+        assert async_sleep.await_args_list[0].args[0] == pytest.approx(0.1)
+        assert async_sleep.await_args_list[1].args[0] == pytest.approx(0.2)
+
+    @pytest.mark.asyncio
     async def test_client_closed_error(self):
         """Test operation on closed client."""
         client = CacheClient()

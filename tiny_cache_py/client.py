@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import random
 from typing import Optional, Dict, Any, Union
 import grpc
 from grpc import StatusCode
@@ -252,7 +253,8 @@ class CacheClient:
                             await self._reconnect(expected_channel=expected_channel)
                         except Exception as reconnect_error:
                             self.logger.warning(f"Reconnection attempt failed: {reconnect_error}")
-                        await asyncio.sleep(self.retry_delay * (2 ** attempt))  # Exponential backoff
+                        backoff = self.retry_delay * (2 ** attempt)
+                        await asyncio.sleep(random.uniform(0, backoff))
                         continue
                     self.logger.error("Cache service unavailable after all retries")
                     raise CacheConnectionError("Cache service unavailable after retries") from e
@@ -261,7 +263,8 @@ class CacheClient:
                         self.logger.warning(
                             f"Request deadline exceeded, retrying ({attempt + 1}/{self.max_retries})"
                         )
-                        await asyncio.sleep(self.retry_delay * (2 ** attempt))  # Exponential backoff
+                        backoff = self.retry_delay * (2 ** attempt)
+                        await asyncio.sleep(random.uniform(0, backoff))
                         continue
                     self.logger.error("Request deadline exceeded after all retries")
                     raise CacheTimeoutError(
@@ -288,7 +291,8 @@ class CacheClient:
                 last_exception = CacheTimeoutError("Request timeout")
                 if attempt < self.max_retries:
                     self.logger.warning(f"Request timeout, retrying ({attempt + 1}/{self.max_retries})")
-                    await asyncio.sleep(self.retry_delay * (2 ** attempt))  # Exponential backoff
+                    backoff = self.retry_delay * (2 ** attempt)
+                    await asyncio.sleep(random.uniform(0, backoff))
                     continue
                 self.logger.error("Request timeout after all retries")
                 raise CacheTimeoutError("Request timeout after retries") from e
