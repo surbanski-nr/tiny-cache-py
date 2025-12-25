@@ -369,6 +369,25 @@ class TestCacheClientConcurrency:
             mock_stub.assert_called_once_with(mock_channel_instance)
 
     @pytest.mark.asyncio
+    async def test_cancellation_propagates(self):
+        """Test asyncio cancellation is not wrapped as CacheError."""
+        client = CacheClient("localhost:50051", health_check_interval=0.0)
+        client._channel = AsyncMock()
+        client._stub = AsyncMock()
+
+        async def block_forever(*args, **kwargs):
+            await asyncio.Event().wait()
+
+        client._stub.Get.side_effect = block_forever
+
+        task = asyncio.create_task(client.get("test_key"))
+        await asyncio.sleep(0)
+        task.cancel()
+
+        with pytest.raises(asyncio.CancelledError):
+            await task
+
+    @pytest.mark.asyncio
     async def test_close(self):
         """Test connection closing."""
         client = CacheClient()
