@@ -53,7 +53,9 @@ class CacheClient:
         connect_timeout: Optional[float] = None,
         default_ttl: int = 3600,
         use_ssl: bool = False,
-        logger: Optional[logging.Logger] = None
+        logger: Optional[logging.Logger] = None,
+        health_check_interval: Optional[float] = 30.0,
+        health_check_timeout: float = 5.0,
     ):
         """
         Initialize cache client.
@@ -66,6 +68,8 @@ class CacheClient:
             connect_timeout: Optional channel readiness timeout in seconds
             default_ttl: Default TTL for cache entries
             use_ssl: Whether to use SSL/TLS connection
+            health_check_interval: Seconds between health checks (set to 0/None to disable)
+            health_check_timeout: Health check timeout in seconds
         """
         address = server_address.strip()
         if not address:
@@ -116,7 +120,12 @@ class CacheClient:
         self._closed = False
         self._connection_lock = asyncio.Lock()
         self._last_health_check = 0.0
-        self._health_check_interval = 30.0  # seconds
+        if health_check_interval is not None and health_check_interval < 0:
+            raise CacheValidationError("Health check interval must be non-negative")
+        if health_check_timeout <= 0:
+            raise CacheValidationError("Health check timeout must be positive")
+        self._health_check_interval = health_check_interval
+        self._health_check_timeout = health_check_timeout
         
         self.logger.debug(f"Initialized CacheClient for {self.host}:{self.port}")
 
@@ -493,6 +502,9 @@ class CacheClient:
         """Check if the connection is healthy by performing a lightweight operation"""
         import time
 
+        if self._health_check_interval is None or self._health_check_interval <= 0:
+            return True
+
         if self._stub is None:
             await self.connect()
             if self._stub is None:
@@ -507,7 +519,7 @@ class CacheClient:
             # Use a direct gRPC call without retry logic to avoid infinite recursion
             response = await asyncio.wait_for(
                 self._stub.Stats(cache_pb2.Empty()),
-                timeout=5.0  # Short timeout for health check
+                timeout=self._health_check_timeout,
             )
             self._last_health_check = current_time
             return True

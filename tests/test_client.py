@@ -327,7 +327,7 @@ class TestCacheClientConnection:
         client = CacheClient("localhost:50051", use_ssl=False)
         client._channel = AsyncMock()
         client._stub = None
-        client._health_check_interval = 0.0
+        client._health_check_interval = 0.1
 
         async def fake_connect():
             client._stub = AsyncMock()
