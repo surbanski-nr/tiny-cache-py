@@ -40,6 +40,19 @@ class TestCacheClientInit:
         assert client.host == "example.com"
         assert client.port == 8080
 
+    def test_init_with_ipv6_server_address(self):
+        """Test client initialization with IPv6 server address."""
+        client = CacheClient("[::1]:8080")
+        assert client.host == "::1"
+        assert client.port == 8080
+
+    def test_init_with_grpcs_scheme_enables_ssl(self):
+        """Test grpcs:// scheme enables SSL."""
+        client = CacheClient("grpcs://example.com:8080")
+        assert client.host == "example.com"
+        assert client.port == 8080
+        assert client.use_ssl is True
+
     def test_init_with_server_address_no_port(self):
         """Test client initialization with server address without port."""
         client = CacheClient("example.com")
@@ -161,6 +174,24 @@ class TestCacheClientConnection:
             assert client._channel == mock_channel_instance
             assert client._stub == mock_stub_instance
             assert not client._closed
+
+    @pytest.mark.asyncio
+    async def test_connect_insecure_ipv6(self):
+        """Test insecure connection establishment with IPv6 target."""
+        client = CacheClient("[::1]:50051", use_ssl=False)
+
+        with patch('grpc.aio.insecure_channel') as mock_channel, \
+             patch('tiny_cache_py.cache_pb2_grpc.CacheServiceStub') as mock_stub:
+
+            mock_channel_instance = AsyncMock()
+            mock_channel.return_value = mock_channel_instance
+            mock_stub_instance = Mock()
+            mock_stub.return_value = mock_stub_instance
+
+            await client.connect()
+
+            mock_channel.assert_called_once_with("[::1]:50051")
+            mock_stub.assert_called_once_with(mock_channel_instance)
 
     @pytest.mark.asyncio
     async def test_connect_secure(self):

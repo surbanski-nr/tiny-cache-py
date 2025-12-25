@@ -193,7 +193,7 @@ class TestCacheClientErrorHandling:
     @pytest.mark.asyncio
     async def test_connection_to_invalid_server(self):
         """Test connection to non-existent server"""
-        client = CacheClient("localhost:99999", timeout=1.0, max_retries=1)
+        client = CacheClient("localhost:59999", timeout=1.0, max_retries=1)
         
         with pytest.raises(CacheConnectionError):
             await client.get("test_key")

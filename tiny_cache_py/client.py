@@ -65,12 +65,42 @@ class CacheClient:
             default_ttl: Default TTL for cache entries
             use_ssl: Whether to use SSL/TLS connection
         """
-        if ":" in server_address:
-            self.host, port_str = server_address.split(":", 1)
-            self.port = int(port_str)
+        address = server_address.strip()
+        if not address:
+            raise CacheValidationError("Server address cannot be empty")
+
+        if address.startswith("grpc://"):
+            address = address[len("grpc://") :]
+            use_ssl = False
+        elif address.startswith("grpcs://"):
+            address = address[len("grpcs://") :]
+            use_ssl = True
+
+        if address.startswith("["):
+            bracket_end = address.find("]")
+            if bracket_end == -1:
+                raise CacheValidationError("Invalid IPv6 server address")
+            self.host = address[1:bracket_end]
+            port_part = address[bracket_end + 1 :]
+            if not port_part:
+                self.port = 50051
+            elif port_part.startswith(":"):
+                self.port = int(port_part[1:])
+            else:
+                raise CacheValidationError("Invalid IPv6 server address")
         else:
-            self.host = server_address
-            self.port = 50051
+            if ":" in address:
+                host_part, port_part = address.rsplit(":", 1)
+                self.host = host_part
+                self.port = int(port_part)
+            else:
+                self.host = address
+                self.port = 50051
+
+        if not self.host:
+            raise CacheValidationError("Server host cannot be empty")
+        if not (1 <= self.port <= 65535):
+            raise CacheValidationError("Server port must be between 1 and 65535")
         self.timeout = timeout
         self.default_ttl = default_ttl
         self.max_retries = max_retries
@@ -85,6 +115,12 @@ class CacheClient:
         self._health_check_interval = 30.0  # seconds
         
         self.logger.debug(f"Initialized CacheClient for {self.host}:{self.port}")
+
+    def _target(self) -> str:
+        host = self.host
+        if ":" in host:
+            host = f"[{host}]"
+        return f"{host}:{self.port}"
 
     async def __aenter__(self):
         await self.connect()
@@ -104,7 +140,7 @@ class CacheClient:
             self._stub = cache_pb2_grpc.CacheServiceStub(self._channel)
             return
             
-        url = f"{self.host}:{self.port}"
+        url = self._target()
         self.logger.info(f"Connecting to cache service at {url}")
         
         if self.use_ssl:
