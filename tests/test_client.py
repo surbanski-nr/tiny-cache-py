@@ -227,6 +227,23 @@ class TestCacheClientConnection:
             mock_channel.assert_not_called()
 
     @pytest.mark.asyncio
+    async def test_connect_concurrent_single_channel(self):
+        """Test concurrent connect calls only create one channel."""
+        client = CacheClient("localhost:50051", use_ssl=False)
+
+        with patch('grpc.aio.insecure_channel') as mock_channel, \
+             patch('tiny_cache_py.cache_pb2_grpc.CacheServiceStub') as mock_stub:
+            mock_channel_instance = AsyncMock()
+            mock_channel.return_value = mock_channel_instance
+            mock_stub_instance = Mock()
+            mock_stub.return_value = mock_stub_instance
+
+            await asyncio.gather(*(client.connect() for _ in range(5)))
+
+            mock_channel.assert_called_once_with("localhost:50051")
+            mock_stub.assert_called_once_with(mock_channel_instance)
+
+    @pytest.mark.asyncio
     async def test_connect_existing_channel_missing_stub(self):
         """Test rebuilding stub when channel exists but stub does not."""
         client = CacheClient("localhost:50051", use_ssl=False)

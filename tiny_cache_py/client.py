@@ -111,6 +111,7 @@ class CacheClient:
         self._channel: Optional[grpc.aio.Channel] = None
         self._stub: Optional[cache_pb2_grpc.CacheServiceStub] = None
         self._closed = False
+        self._connection_lock = asyncio.Lock()
         self._last_health_check = 0.0
         self._health_check_interval = 30.0  # seconds
         
@@ -131,29 +132,30 @@ class CacheClient:
 
     async def connect(self) -> None:
         """Establish connection to cache service"""
-        if self._channel is not None and self._stub is not None and not self._closed:
-            self.logger.debug("Already connected to cache service")
-            return
+        async with self._connection_lock:
+            if self._channel is not None and self._stub is not None and not self._closed:
+                self.logger.debug("Already connected to cache service")
+                return
 
-        if self._channel is not None and self._stub is None and not self._closed:
-            self.logger.debug("Channel exists without stub, rebuilding stub")
+            if self._channel is not None and self._stub is None and not self._closed:
+                self.logger.debug("Channel exists without stub, rebuilding stub")
+                self._stub = cache_pb2_grpc.CacheServiceStub(self._channel)
+                return
+
+            url = self._target()
+            self.logger.info(f"Connecting to cache service at {url}")
+
+            if self.use_ssl:
+                credentials = grpc.ssl_channel_credentials()
+                self._channel = grpc.aio.secure_channel(url, credentials)
+                self.logger.debug("Using SSL/TLS connection")
+            else:
+                self._channel = grpc.aio.insecure_channel(url)
+                self.logger.debug("Using insecure connection")
+
             self._stub = cache_pb2_grpc.CacheServiceStub(self._channel)
-            return
-            
-        url = self._target()
-        self.logger.info(f"Connecting to cache service at {url}")
-        
-        if self.use_ssl:
-            credentials = grpc.ssl_channel_credentials()
-            self._channel = grpc.aio.secure_channel(url, credentials)
-            self.logger.debug("Using SSL/TLS connection")
-        else:
-            self._channel = grpc.aio.insecure_channel(url)
-            self.logger.debug("Using insecure connection")
-            
-        self._stub = cache_pb2_grpc.CacheServiceStub(self._channel)
-        self._closed = False
-        self.logger.info(f"Successfully connected to cache service at {url}")
+            self._closed = False
+            self.logger.info(f"Successfully connected to cache service at {url}")
 
     async def close(self) -> None:
         """Close connection to cache service"""
