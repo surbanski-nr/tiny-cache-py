@@ -262,6 +262,32 @@ class TestCacheClientConnection:
             assert client._stub == mock_stub_instance
 
     @pytest.mark.asyncio
+    async def test_reconnect_concurrent_idempotent(self):
+        """Test concurrent reconnect calls only reconnect once."""
+        client = CacheClient("localhost:50051", use_ssl=False)
+        old_channel = AsyncMock()
+        old_channel.close = AsyncMock()
+        client._channel = old_channel
+        client._stub = Mock()
+
+        new_channel = AsyncMock()
+        new_stub = Mock()
+
+        with patch('grpc.aio.insecure_channel') as mock_channel, \
+             patch('tiny_cache_py.cache_pb2_grpc.CacheServiceStub') as mock_stub:
+            mock_channel.return_value = new_channel
+            mock_stub.return_value = new_stub
+
+            await asyncio.gather(
+                client._reconnect(expected_channel=old_channel),
+                client._reconnect(expected_channel=old_channel),
+            )
+
+            old_channel.close.assert_called_once()
+            mock_channel.assert_called_once_with("localhost:50051")
+            mock_stub.assert_called_once_with(new_channel)
+
+    @pytest.mark.asyncio
     async def test_close(self):
         """Test connection closing."""
         client = CacheClient()
@@ -576,7 +602,7 @@ class TestCacheClientErrorHandling:
         client._stub.Stats.side_effect = grpc_error
         
         # Mock the reconnect method to prevent it from succeeding
-        async def mock_reconnect():
+        async def mock_reconnect(*args, **kwargs):
             raise Exception("Reconnection failed")
         
         client._reconnect = mock_reconnect

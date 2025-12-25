@@ -133,29 +133,32 @@ class CacheClient:
     async def connect(self) -> None:
         """Establish connection to cache service"""
         async with self._connection_lock:
-            if self._channel is not None and self._stub is not None and not self._closed:
-                self.logger.debug("Already connected to cache service")
-                return
+            await self._connect_locked()
 
-            if self._channel is not None and self._stub is None and not self._closed:
-                self.logger.debug("Channel exists without stub, rebuilding stub")
-                self._stub = cache_pb2_grpc.CacheServiceStub(self._channel)
-                return
+    async def _connect_locked(self) -> None:
+        if self._channel is not None and self._stub is not None and not self._closed:
+            self.logger.debug("Already connected to cache service")
+            return
 
-            url = self._target()
-            self.logger.info(f"Connecting to cache service at {url}")
-
-            if self.use_ssl:
-                credentials = grpc.ssl_channel_credentials()
-                self._channel = grpc.aio.secure_channel(url, credentials)
-                self.logger.debug("Using SSL/TLS connection")
-            else:
-                self._channel = grpc.aio.insecure_channel(url)
-                self.logger.debug("Using insecure connection")
-
+        if self._channel is not None and self._stub is None and not self._closed:
+            self.logger.debug("Channel exists without stub, rebuilding stub")
             self._stub = cache_pb2_grpc.CacheServiceStub(self._channel)
-            self._closed = False
-            self.logger.info(f"Successfully connected to cache service at {url}")
+            return
+
+        url = self._target()
+        self.logger.info(f"Connecting to cache service at {url}")
+
+        if self.use_ssl:
+            credentials = grpc.ssl_channel_credentials()
+            self._channel = grpc.aio.secure_channel(url, credentials)
+            self.logger.debug("Using SSL/TLS connection")
+        else:
+            self._channel = grpc.aio.insecure_channel(url)
+            self.logger.debug("Using insecure connection")
+
+        self._stub = cache_pb2_grpc.CacheServiceStub(self._channel)
+        self._closed = False
+        self.logger.info(f"Successfully connected to cache service at {url}")
 
     async def close(self) -> None:
         """Close connection to cache service"""
@@ -219,7 +222,8 @@ class CacheClient:
                         self.logger.warning(f"Cache service unavailable, retrying ({attempt + 1}/{self.max_retries})")
                         # Try to reconnect on unavailable error
                         try:
-                            await self._reconnect()
+                            expected_channel = self._channel
+                            await self._reconnect(expected_channel=expected_channel)
                         except Exception as reconnect_error:
                             self.logger.warning(f"Reconnection attempt failed: {reconnect_error}")
                         await asyncio.sleep(self.retry_delay * (2 ** attempt))  # Exponential backoff
@@ -498,26 +502,36 @@ class CacheClient:
             return
             
         # Check connection health periodically
+        expected_channel = self._channel
         if not await self._check_connection_health():
             self.logger.warning("Connection health check failed, attempting reconnection")
-            await self._reconnect()
+            await self._reconnect(expected_channel=expected_channel)
     
-    async def _reconnect(self) -> None:
+    async def _reconnect(self, expected_channel: Optional[grpc.aio.Channel] = None) -> None:
         """Reconnect to the cache service"""
         self.logger.info("Reconnecting to cache service")
         try:
-            # Close existing connection
-            if self._channel and not self._closed:
-                await self._channel.close()
-                
-            # Reset connection state
-            self._channel = None
-            self._stub = None
-            self._closed = False
-            
-            # Establish new connection
-            await self.connect()
-            self.logger.info("Successfully reconnected to cache service")
+            async with self._connection_lock:
+                if (
+                    expected_channel is not None
+                    and self._channel is not expected_channel
+                    and self.is_connected()
+                ):
+                    self.logger.debug("Reconnect already completed by another coroutine")
+                    return
+
+                # Close existing connection
+                if self._channel and not self._closed:
+                    await self._channel.close()
+
+                # Reset connection state
+                self._channel = None
+                self._stub = None
+                self._closed = False
+
+                # Establish new connection
+                await self._connect_locked()
+                self.logger.info("Successfully reconnected to cache service")
             
         except Exception as e:
             self.logger.error(f"Failed to reconnect: {e}")
