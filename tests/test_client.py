@@ -341,6 +341,33 @@ class TestCacheClientConnection:
         assert await client._check_connection_health() is True
         client.connect.assert_called_once()
 
+
+class TestCacheClientConcurrency:
+    """Concurrency edge-case tests."""
+
+    @pytest.mark.asyncio
+    async def test_concurrent_get_creates_single_channel(self):
+        """Test concurrent operations only create one channel."""
+        client = CacheClient("localhost:50051", health_check_interval=0.0)
+
+        mock_channel_instance = AsyncMock()
+        mock_stub_instance = AsyncMock()
+        mock_response = Mock()
+        mock_response.found = True
+        mock_response.value = b"test_value"
+        mock_stub_instance.Get.return_value = mock_response
+
+        with patch("grpc.aio.insecure_channel") as mock_channel, \
+             patch("tiny_cache_py.cache_pb2_grpc.CacheServiceStub") as mock_stub:
+            mock_channel.return_value = mock_channel_instance
+            mock_stub.return_value = mock_stub_instance
+
+            results = await asyncio.gather(*(client.get("test_key") for _ in range(10)))
+
+            assert all(result == "test_value" for result in results)
+            mock_channel.assert_called_once_with("localhost:50051")
+            mock_stub.assert_called_once_with(mock_channel_instance)
+
     @pytest.mark.asyncio
     async def test_close(self):
         """Test connection closing."""
