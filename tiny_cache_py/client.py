@@ -476,6 +476,11 @@ class CacheClient:
     async def _check_connection_health(self) -> bool:
         """Check if the connection is healthy by performing a lightweight operation"""
         import time
+
+        if self._stub is None:
+            await self.connect()
+            if self._stub is None:
+                return False
         
         # Skip health check if we just did one recently
         current_time = time.time()

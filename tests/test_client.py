@@ -288,6 +288,23 @@ class TestCacheClientConnection:
             mock_stub.assert_called_once_with(new_channel)
 
     @pytest.mark.asyncio
+    async def test_health_check_rebuilds_stub_when_missing(self):
+        """Test health check triggers a stub rebuild when stub is missing."""
+        client = CacheClient("localhost:50051", use_ssl=False)
+        client._channel = AsyncMock()
+        client._stub = None
+        client._health_check_interval = 0.0
+
+        async def fake_connect():
+            client._stub = AsyncMock()
+            client._stub.Stats.return_value = Mock()
+
+        client.connect = AsyncMock(side_effect=fake_connect)
+
+        assert await client._check_connection_health() is True
+        client.connect.assert_called_once()
+
+    @pytest.mark.asyncio
     async def test_close(self):
         """Test connection closing."""
         client = CacheClient()
