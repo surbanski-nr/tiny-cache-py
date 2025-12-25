@@ -17,6 +17,9 @@ from tiny_cache_py import (
 from tiny_cache_py import cache_pb2
 
 
+pytestmark = pytest.mark.unit
+
+
 class TestCacheClientInit:
     """Test CacheClient initialization and configuration."""
     
@@ -860,7 +863,6 @@ class TestCacheClientErrorHandling:
             await client.get("test_key")
 
 
-@pytest.mark.unit
 class TestExceptionHierarchy:
     """Test exception class hierarchy."""
     
