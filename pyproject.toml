@@ -44,6 +44,10 @@ dev = [
     "tox>=4.0.0",
 ]
 
+health = [
+    "grpcio-health-checking>=1.76.0,<2.0.0",
+]
+
 [project.urls]
 Homepage = "https://github.com/surbanski-nr/tiny-cache-py"
 Repository = "https://github.com/surbanski-nr/tiny-cache-py"
@@ -94,6 +98,7 @@ show_error_codes = true
 [[tool.mypy.overrides]]
 module = [
     "grpc.*",
+    "grpc_health.*",
     "google.protobuf.*",
 ]
 ignore_missing_imports = true

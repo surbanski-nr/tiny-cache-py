@@ -15,6 +15,7 @@ This document describes the behavior of the current `CacheClient` implementation
 - `use_ssl`: `False`
 - `health_check_interval`: `30.0` seconds (set to `0`/`None` to disable)
 - `health_check_timeout`: `5.0` seconds
+- `health_check_method`: `"stats"` (or `"grpc_health"` when `grpcio-health-checking` is installed)
 - `default_metadata`: `None`
 
 ## Connection lifecycle
@@ -130,4 +131,3 @@ All RPC-like methods accept per-call overrides:
 - `CacheTimeoutError`: operation timed out after retries
 - `CacheInvalidArgumentError`: maps `grpc.StatusCode.INVALID_ARGUMENT`
 - `CacheError`: all other unexpected failures (generic wrapper)
-

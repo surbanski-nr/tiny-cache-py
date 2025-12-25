@@ -54,6 +54,7 @@ class CacheClient:
         logger: Optional[logging.Logger] = None,
         health_check_interval: Optional[float] = 30.0,
         health_check_timeout: float = 5.0,
+        health_check_method: str = "stats",
         default_metadata: Optional[Sequence[Tuple[str, str]]] = None,
     ):
         """
@@ -69,6 +70,7 @@ class CacheClient:
             use_ssl: Whether to use SSL/TLS connection
             health_check_interval: Seconds between health checks (set to 0/None to disable)
             health_check_timeout: Health check timeout in seconds
+            health_check_method: Health check strategy ("stats" or "grpc_health")
             default_metadata: Default gRPC metadata for all calls
         """
         self.host, self.port, self.use_ssl = parse_server_address(server_address, use_ssl)
@@ -89,8 +91,19 @@ class CacheClient:
             raise CacheValidationError("Health check interval must be non-negative")
         if health_check_timeout <= 0:
             raise CacheValidationError("Health check timeout must be positive")
+        if health_check_method not in {"stats", "grpc_health"}:
+            raise CacheValidationError("Health check method must be 'stats' or 'grpc_health'")
+        if health_check_method == "grpc_health":
+            try:
+                import grpc_health.v1.health_pb2
+                import grpc_health.v1.health_pb2_grpc
+            except ImportError as exc:
+                raise CacheValidationError(
+                    "Health check method 'grpc_health' requires grpcio-health-checking"
+                ) from exc
         self._health_check_interval = health_check_interval
         self._health_check_timeout = health_check_timeout
+        self._health_check_method = health_check_method
         
         self.logger.debug("Initialized CacheClient for %s:%s", self.host, self.port)
 
@@ -624,8 +637,7 @@ class CacheClient:
             stub = self._stub
             if stub is None:
                 return False
-            # Use direct gRPC call to avoid retry logic
-            await stub.Stats(cache_pb2.Empty(), timeout=5.0, metadata=call_metadata)
+            await self._perform_health_check(timeout=5.0, metadata=call_metadata)
             self.logger.debug("Ping successful")
             return True
         except asyncio.CancelledError:
@@ -658,9 +670,7 @@ class CacheClient:
             return True
             
         try:
-            # Use a direct gRPC call without retry logic to avoid infinite recursion
-            await self._stub.Stats(
-                cache_pb2.Empty(),
+            await self._perform_health_check(
                 timeout=self._health_check_timeout,
                 metadata=self._default_metadata,
             )
@@ -671,6 +681,39 @@ class CacheClient:
         except Exception as e:
             self.logger.warning("Health check failed: %s", e)
             return False
+
+    async def _perform_health_check(
+        self,
+        *,
+        timeout: float,
+        metadata: Optional[Tuple[Tuple[str, str], ...]],
+    ) -> None:
+        if self._health_check_method == "grpc_health":
+            from grpc_health.v1 import health_pb2
+            from grpc_health.v1 import health_pb2_grpc
+
+            if self._channel is None:
+                raise CacheConnectionError("Client is not connected")
+            health_stub = health_pb2_grpc.HealthStub(self._channel)
+            response = await health_stub.Check(
+                health_pb2.HealthCheckRequest(service=""),
+                timeout=timeout,
+                metadata=metadata,
+            )
+            if response.status != health_pb2.HealthCheckResponse.SERVING:
+                raise CacheConnectionError(
+                    f"Health check returned status {response.status}"
+                )
+            return
+
+        stub = self._stub
+        if stub is None:
+            raise CacheConnectionError("Client is not connected")
+        await stub.Stats(
+            cache_pb2.Empty(),
+            timeout=timeout,
+            metadata=metadata,
+        )
     
     async def _ensure_connection(self) -> None:
         """Ensure we have a healthy connection, reconnecting if necessary"""

@@ -61,6 +61,21 @@ class TestCacheClientInit:
         assert client.host == "example.com"
         assert client.port == 50051
 
+    def test_init_invalid_health_check_method(self):
+        with pytest.raises(
+            CacheValidationError,
+            match="Health check method must be 'stats' or 'grpc_health'",
+        ):
+            CacheClient(health_check_method="invalid")
+
+    def test_init_grpc_health_checking_optional_dependency(self):
+        try:
+            client = CacheClient(health_check_method="grpc_health")
+        except CacheValidationError as exc:
+            assert "grpcio-health-checking" in str(exc)
+        else:
+            assert client._health_check_method == "grpc_health"
+
     def test_init_with_custom_params(self):
         """Test client initialization with custom parameters."""
         client = CacheClient(
