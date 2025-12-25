@@ -141,7 +141,7 @@ make quality
 
 ## Compatibility
 
-- Python 3.8+
+- Python 3.8 - 3.13
 - gRPC 1.50.0+
 - Compatible with tiny-cache server v0.1.0+
 
