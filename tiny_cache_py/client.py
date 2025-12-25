@@ -174,6 +174,8 @@ class CacheClient:
                     self._channel.channel_ready(),
                     timeout=self.connect_timeout,
                 )
+            except asyncio.CancelledError:
+                raise
             except Exception as e:
                 await self._channel.close()
                 self._channel = None
@@ -240,6 +242,8 @@ class CacheClient:
                     operation(*args, **kwargs),
                     timeout=self.timeout
                 )
+            except asyncio.CancelledError:
+                raise
             except grpc.RpcError as e:
                 last_exception = e
                 if e.code() == StatusCode.UNAVAILABLE:
@@ -486,6 +490,8 @@ class CacheClient:
             )
             self.logger.debug("Ping successful")
             return True
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             self.logger.debug(f"Ping failed: {e}")
             return False
@@ -523,6 +529,8 @@ class CacheClient:
             )
             self._last_health_check = current_time
             return True
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             self.logger.warning(f"Health check failed: {e}")
             return False
@@ -566,6 +574,8 @@ class CacheClient:
                 await self._connect_locked()
                 self.logger.info("Successfully reconnected to cache service")
             
+        except asyncio.CancelledError:
+            raise
         except Exception as e:
             self.logger.error(f"Failed to reconnect: {e}")
             raise CacheConnectionError(f"Reconnection failed: {e}")
