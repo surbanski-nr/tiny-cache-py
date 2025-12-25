@@ -11,7 +11,7 @@ setup(
     install_requires=[
         "grpcio>=1.76.0",
         "grpcio-tools>=1.76.0",
-        "protobuf>=6.31.1",
+        "protobuf>=6.31.1,<7.0.0",
     ],
     extras_require={
         "dev": [
