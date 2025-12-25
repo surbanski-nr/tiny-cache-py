@@ -7,8 +7,6 @@ from grpc import StatusCode
 from . import cache_pb2
 from . import cache_pb2_grpc
 
-logger = logging.getLogger(__name__)
-
 class CacheError(Exception):
     """Base exception for cache operations"""
     pass
