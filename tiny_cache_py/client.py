@@ -244,6 +244,23 @@ class CacheClient:
             
         return await self._execute_with_retry(_get_operation)
 
+    async def get_bytes(self, key: str) -> Optional[bytes]:
+        """
+        Get raw bytes value from cache.
+        """
+        self._validate_key(key)
+        self.logger.debug(f"Getting raw value for key: {key}")
+
+        async def _get_operation():
+            response = await self._stub.Get(cache_pb2.CacheKey(key=key))
+            if response.found:
+                self.logger.debug(f"Cache hit for key: {key}")
+                return response.value
+            self.logger.debug(f"Cache miss for key: {key}")
+            return None
+
+        return await self._execute_with_retry(_get_operation)
+
     async def set(
         self,
         key: str,
@@ -287,6 +304,45 @@ class CacheClient:
                 self.logger.debug(f"Successfully set value for key: {key}")
             return success
             
+        return await self._execute_with_retry(_set_operation)
+
+    async def set_bytes(
+        self,
+        key: str,
+        value: bytes,
+        ttl: Optional[int] = None,
+    ) -> bool:
+        """
+        Store raw bytes value in cache.
+        """
+        self._validate_key(key)
+        if value is None:
+            raise CacheValidationError("Value cannot be None")
+        if not isinstance(value, (bytes, bytearray, memoryview)):
+            raise CacheValidationError("Value must be bytes")
+
+        value_bytes = bytes(value)
+
+        if ttl is None:
+            ttl = self.default_ttl
+        elif ttl < 0:
+            raise CacheValidationError("TTL must be non-negative")
+
+        self.logger.debug(f"Setting raw value for key: {key}, ttl: {ttl}")
+
+        async def _set_operation():
+            response = await self._stub.Set(
+                cache_pb2.CacheItem(
+                    key=key,
+                    value=value_bytes,
+                    ttl=ttl,
+                )
+            )
+            success = response.status == "OK"
+            if success:
+                self.logger.debug(f"Successfully set raw value for key: {key}")
+            return success
+
         return await self._execute_with_retry(_set_operation)
 
     async def delete(self, key: str) -> bool:

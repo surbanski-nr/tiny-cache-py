@@ -305,6 +305,20 @@ class TestCacheClientOperations:
             await client.get("test_key")
 
     @pytest.mark.asyncio
+    async def test_get_bytes_success(self, client_with_mock_stub):
+        """Test successful get_bytes operation."""
+        client = client_with_mock_stub
+
+        mock_response = Mock()
+        mock_response.found = True
+        mock_response.value = b"\xff\xfe"
+        client._stub.Get.return_value = mock_response
+
+        result = await client.get_bytes("test_key")
+
+        assert result == b"\xff\xfe"
+
+    @pytest.mark.asyncio
     async def test_get_not_found(self, client_with_mock_stub):
         """Test get operation when key not found."""
         client = client_with_mock_stub
@@ -344,6 +358,32 @@ class TestCacheClientOperations:
         assert call_args.key == "test_key"
         assert call_args.value == b"test_value"
         assert call_args.ttl == 300
+
+    @pytest.mark.asyncio
+    async def test_set_bytes_success(self, client_with_mock_stub):
+        """Test successful set_bytes operation."""
+        client = client_with_mock_stub
+
+        mock_response = Mock()
+        mock_response.status = "OK"
+        client._stub.Set.return_value = mock_response
+
+        result = await client.set_bytes("test_key", b"\xff\xfe", ttl=300)
+
+        assert result is True
+        client._stub.Set.assert_called_once()
+        call_args = client._stub.Set.call_args[0][0]
+        assert call_args.key == "test_key"
+        assert call_args.value == b"\xff\xfe"
+        assert call_args.ttl == 300
+
+    @pytest.mark.asyncio
+    async def test_set_bytes_invalid_value_type(self, client_with_mock_stub):
+        """Test set_bytes rejects non-bytes values."""
+        client = client_with_mock_stub
+
+        with pytest.raises(CacheValidationError, match="Value must be bytes"):
+            await client.set_bytes("test_key", "not-bytes", ttl=300)
 
     @pytest.mark.asyncio
     async def test_set_with_default_ttl(self, client_with_mock_stub):
