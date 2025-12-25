@@ -263,9 +263,6 @@ class TestCacheClientPerformance:
             
             get_time = time.time() - start_time
             
-            print(f"Set throughput: {num_operations / set_time:.2f} ops/sec")
-            print(f"Get throughput: {num_operations / get_time:.2f} ops/sec")
-            
             for i in range(num_operations):
                 await client.delete(f"perf_key_{i}")
         finally:
