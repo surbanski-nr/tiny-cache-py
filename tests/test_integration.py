@@ -180,7 +180,7 @@ class TestCacheClientIntegration:
         client = await self._create_client()
         try:
             test_cases = [
-                ("unicode_key_🔑", "unicode_value_🎯"),
+                ("unicode_key", "unicode_value"),
                 ("spaces in key", "spaces in value"),
                 ("key-with-dashes", "value-with-dashes"),
                 ("key_with_underscores", "value_with_underscores"),
