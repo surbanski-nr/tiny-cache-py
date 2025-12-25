@@ -23,7 +23,7 @@ proto: ## Generate protobuf files from this repo's cache.proto
 	@echo "Generating protobuf files from cache.proto..."
 	$(PROTOC) -I. --python_out=tiny_cache_py/ --grpc_python_out=tiny_cache_py/ cache.proto
 	@echo "Fixing protobuf imports..."
-	sed -i 's/^import cache_pb2/from . import cache_pb2/' tiny_cache_py/cache_pb2_grpc.py
+	$(PYTHON) scripts/fix_protoc_imports.py tiny_cache_py/cache_pb2_grpc.py
 	@echo "Protobuf files generated successfully"
 
 gen: proto ## Alias for proto target
