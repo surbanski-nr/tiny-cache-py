@@ -51,6 +51,9 @@ Issues = "https://github.com/surbanski-nr/tiny-cache-py/issues"
 [tool.setuptools_scm]
 write_to = "tiny_cache_py/_version.py"
 
+[tool.setuptools.package-data]
+tiny_cache_py = ["py.typed", "*.pyi"]
+
 [tool.black]
 line-length = 88
 target-version = ['py38']
