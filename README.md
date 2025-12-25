@@ -111,6 +111,9 @@ make test-coverage
 # Run all tests
 pytest
 
+# Note: pytest-asyncio runs in strict mode; async tests must be marked with
+# @pytest.mark.asyncio.
+
 # Run specific test categories
 pytest -m unit          # Unit tests only
 pytest -m integration   # Integration tests only
