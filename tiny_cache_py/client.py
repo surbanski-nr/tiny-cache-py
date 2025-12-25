@@ -258,26 +258,26 @@ class CacheClient:
                         await asyncio.sleep(self.retry_delay * (2 ** attempt))  # Exponential backoff
                         continue
                     self.logger.error("Cache service unavailable after all retries")
-                    raise CacheConnectionError("Cache service unavailable after retries")
+                    raise CacheConnectionError("Cache service unavailable after retries") from e
                 elif e.code() == StatusCode.INVALID_ARGUMENT:
                     self.logger.error(f"Invalid argument error: {e.details()}")
-                    raise CacheInvalidArgumentError(f"Invalid argument: {e.details()}")
+                    raise CacheInvalidArgumentError(f"Invalid argument: {e.details()}") from e
                 elif e.code() == StatusCode.RESOURCE_EXHAUSTED:
                     self.logger.error(f"Cache resource exhausted: {e.details()}")
-                    raise CacheError(f"Cache full: {e.details()}")
+                    raise CacheError(f"Cache full: {e.details()}") from e
                 else:
                     self.logger.error(f"Unexpected gRPC error {e.code()}: {e.details()}")
-                    raise CacheError(f"gRPC error: {e.details()}")
-            except asyncio.TimeoutError:
+                    raise CacheError(f"gRPC error: {e.details()}") from e
+            except asyncio.TimeoutError as e:
                 last_exception = CacheTimeoutError("Request timeout")
                 if attempt < self.max_retries:
                     self.logger.warning(f"Request timeout, retrying ({attempt + 1}/{self.max_retries})")
                     await asyncio.sleep(self.retry_delay * (2 ** attempt))  # Exponential backoff
                     continue
                 self.logger.error("Request timeout after all retries")
-                raise CacheTimeoutError("Request timeout after retries")
+                raise CacheTimeoutError("Request timeout after retries") from e
             except Exception as e:
-                raise CacheError(f"Unexpected error: {e}")
+                raise CacheError(f"Unexpected error: {e}") from e
         
         # If we get here, all retries failed
         if last_exception:
@@ -578,4 +578,4 @@ class CacheClient:
             raise
         except Exception as e:
             self.logger.error(f"Failed to reconnect: {e}")
-            raise CacheConnectionError(f"Reconnection failed: {e}")
+            raise CacheConnectionError(f"Reconnection failed: {e}") from e

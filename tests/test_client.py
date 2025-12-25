@@ -658,8 +658,10 @@ class TestCacheClientErrorHandling:
         
         client._reconnect = mock_reconnect
         
-        with pytest.raises(CacheConnectionError, match="Cache service unavailable after retries"):
+        with pytest.raises(CacheConnectionError, match="Cache service unavailable after retries") as excinfo:
             await client.get("test_key")
+
+        assert excinfo.value.__cause__ is grpc_error
         
         # Verify that Get was called the expected number of times
         assert client._stub.Get.call_count >= 3
@@ -675,8 +677,10 @@ class TestCacheClientErrorHandling:
         
         client._stub.Get.side_effect = grpc_error
         
-        with pytest.raises(CacheInvalidArgumentError, match="Invalid argument: Invalid key format"):
+        with pytest.raises(CacheInvalidArgumentError, match="Invalid argument: Invalid key format") as excinfo:
             await client.get("test_key")
+
+        assert excinfo.value.__cause__ is grpc_error
 
     @pytest.mark.asyncio
     async def test_grpc_resource_exhausted(self, client_with_mock_stub):
@@ -689,8 +693,10 @@ class TestCacheClientErrorHandling:
         
         client._stub.Get.side_effect = grpc_error
         
-        with pytest.raises(CacheError, match="Cache full: Cache full"):
+        with pytest.raises(CacheError, match="Cache full: Cache full") as excinfo:
             await client.get("test_key")
+
+        assert excinfo.value.__cause__ is grpc_error
 
     @pytest.mark.asyncio
     async def test_timeout_with_retry(self, client_with_mock_stub):
