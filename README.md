@@ -62,7 +62,7 @@ Environment variables:
 ### CacheClient Methods
 
 - `get(key: str) → Optional[str]`: Retrieve cached value
-- `set(key: str, value: Any, ttl: Optional[int]) → bool`: Store value with optional TTL
+- `set(key: str, value: Any, ttl: Optional[int]) → bool`: Store value with optional TTL (seconds; `None` uses default, `0` disables expiry)
 - `delete(key: str) → bool`: Remove cached entry
 - `stats() → Dict[str, Any]`: Get cache statistics
 - `ping() → bool`: Check server availability

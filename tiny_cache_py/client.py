@@ -309,7 +309,7 @@ class CacheClient:
         Args:
             key: Cache key
             value: Value to store
-            ttl: Time to live in seconds (None for default)
+            ttl: Time to live in seconds (None for default_ttl, 0 disables expiry)
             
         Returns:
             True if successful
@@ -350,6 +350,9 @@ class CacheClient:
     ) -> bool:
         """
         Store raw bytes value in cache.
+
+        Args:
+            ttl: Time to live in seconds (None for default_ttl, 0 disables expiry)
         """
         self._validate_key(key)
         if value is None:

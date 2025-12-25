@@ -53,6 +53,7 @@ This document describes the behavior of the current `CacheClient` implementation
 - Validates `key` and converts `value` to `str` then encodes it as UTF-8 bytes.
 - TTL behavior:
   - If `ttl is None`, uses `default_ttl`.
+  - If `ttl == 0`, the server treats it as "no expiration".
   - If `ttl < 0`, raises `CacheValidationError`.
 - Calls `CacheService.Set`.
 - Returns `True` iff `CacheResponse.status == "OK"`.
@@ -93,4 +94,3 @@ This document describes the behavior of the current `CacheClient` implementation
 - `CacheTimeoutError`: operation timed out after retries
 - `CacheInvalidArgumentError`: maps `grpc.StatusCode.INVALID_ARGUMENT`
 - `CacheError`: all other unexpected failures (generic wrapper)
-
