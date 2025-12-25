@@ -21,7 +21,6 @@ class CacheBenchmark:
     def __init__(self, server_address: str = "localhost:50051"):
         self.server_address = server_address
         self.client = None
-        self.results = {}
     
     async def setup(self):
         """Setup benchmark environment"""
@@ -41,15 +40,15 @@ class CacheBenchmark:
         value = "x" * value_size
         latencies = []
         
-        start_time = time.time()
+        start_time = time.perf_counter()
         
         for i in range(num_ops):
             key = f"bench_set_{i}"
-            op_start = time.time()
+            op_start = time.perf_counter()
             await self.client.set(key, value, ttl=3600)
-            latencies.append((time.time() - op_start) * 1000)  # ms
+            latencies.append((time.perf_counter() - op_start) * 1000)  # ms
         
-        total_time = time.time() - start_time
+        total_time = time.perf_counter() - start_time
         
         return {
             "operation": "SET",
@@ -76,17 +75,17 @@ class CacheBenchmark:
         latencies = []
         hits = 0
         
-        start_time = time.time()
+        start_time = time.perf_counter()
         
         for i in range(num_ops):
             key = f"bench_get_{i}"
-            op_start = time.time()
+            op_start = time.perf_counter()
             result = await self.client.get(key)
-            latencies.append((time.time() - op_start) * 1000)  # ms
+            latencies.append((time.perf_counter() - op_start) * 1000)  # ms
             if result is not None:
                 hits += 1
         
-        total_time = time.time() - start_time
+        total_time = time.perf_counter() - start_time
         
         return {
             "operation": "GET",
@@ -113,25 +112,25 @@ class CacheBenchmark:
         latencies = []
         operations = []
         
-        start_time = time.time()
+        start_time = time.perf_counter()
         
         for i in range(num_ops):
             if (i / num_ops) < read_ratio:
                 # GET operation
                 key = f"bench_mixed_{i % int(num_ops * 0.5)}"
-                op_start = time.time()
+                op_start = time.perf_counter()
                 await self.client.get(key)
                 operations.append("GET")
             else:
                 # SET operation
                 key = f"bench_mixed_{i}"
-                op_start = time.time()
+                op_start = time.perf_counter()
                 await self.client.set(key, f"value_{i}", ttl=3600)
                 operations.append("SET")
             
-            latencies.append((time.time() - op_start) * 1000)  # ms
+            latencies.append((time.perf_counter() - op_start) * 1000)  # ms
         
-        total_time = time.time() - start_time
+        total_time = time.perf_counter() - start_time
         
         return {
             "operation": "MIXED",
@@ -162,23 +161,23 @@ class CacheBenchmark:
                 value = f"value_{client_id}_{i}"
                 
                 # Mixed operations
-                op_start = time.time()
+                op_start = time.perf_counter()
                 if i % 2 == 0:
                     await client.set(key, value, ttl=3600)
                 else:
                     await client.get(key)
-                latencies.append((time.time() - op_start) * 1000)
+                latencies.append((time.perf_counter() - op_start) * 1000)
             
             await client.close()
             return latencies
         
-        start_time = time.time()
+        start_time = time.perf_counter()
         
         # Run concurrent clients
         tasks = [client_worker(i) for i in range(num_clients)]
         all_latencies = await asyncio.gather(*tasks)
         
-        total_time = time.time() - start_time
+        total_time = time.perf_counter() - start_time
         
         # Flatten latencies
         flat_latencies = [lat for client_lats in all_latencies for lat in client_lats]
