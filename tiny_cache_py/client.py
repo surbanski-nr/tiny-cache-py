@@ -362,7 +362,11 @@ class CacheClient:
 
     def is_connected(self) -> bool:
         """Check if client is connected"""
-        return self._channel is not None and not self._closed
+        return (
+            self._channel is not None
+            and self._stub is not None
+            and not self._closed
+        )
     
     async def _check_connection_health(self) -> bool:
         """Check if the connection is healthy by performing a lightweight operation"""

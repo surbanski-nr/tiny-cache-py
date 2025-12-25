@@ -236,6 +236,7 @@ class TestCacheClientConnection:
         assert not client.is_connected()
         
         client._channel = AsyncMock()
+        client._stub = AsyncMock()
         assert client.is_connected()
         
         client._closed = True
