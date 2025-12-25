@@ -152,6 +152,7 @@ make quality
 ## Compatibility
 
 - Python 3.8 - 3.13
+- CI runs unit tests on Python 3.8 - 3.13 (`.github/workflows/ci.yml`)
 - gRPC 1.76.0+
 - Compatible with tiny-cache server v0.1.0+
 

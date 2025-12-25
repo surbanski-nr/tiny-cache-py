@@ -41,6 +41,7 @@ dev = [
     "flake8>=6.0.0",
     "mypy>=1.0.0",
     "grpcio-tools>=1.76.0,<2.0.0",
+    "tox>=4.0.0",
 ]
 
 [project.urls]
