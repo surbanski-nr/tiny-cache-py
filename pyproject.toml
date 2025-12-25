@@ -91,8 +91,6 @@ show_error_codes = true
 module = [
     "grpc.*",
     "google.protobuf.*",
-    "tiny_cache_py.cache_pb2",
-    "tiny_cache_py.cache_pb2_grpc"
 ]
 ignore_missing_imports = true
 

@@ -1,11 +1,25 @@
 import asyncio
 import logging
 import random
-from typing import Optional, Dict, Any, Union, Sequence, Tuple
+from types import TracebackType
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Dict,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+    TypeVar,
+)
 import grpc
 from grpc import StatusCode
 from . import cache_pb2
 from . import cache_pb2_grpc
+
+T = TypeVar("T")
+
 
 class CacheError(Exception):
     """Base exception for cache operations"""
@@ -148,11 +162,16 @@ class CacheClient:
             return extra
         return (*self._default_metadata, *extra)
 
-    async def __aenter__(self):
+    async def __aenter__(self) -> "CacheClient":
         await self.connect()
         return self
 
-    async def __aexit__(self, exc_type, exc_val, exc_tb):
+    async def __aexit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_val: Optional[BaseException],
+        exc_tb: Optional[TracebackType],
+    ) -> None:
         await self.close()
 
     async def connect(self) -> None:
@@ -241,11 +260,11 @@ class CacheClient:
 
     async def _execute_with_retry(
         self,
-        operation,
+        operation: Callable[[], Awaitable[T]],
         *,
         max_retries: Optional[int] = None,
         retry_delay: Optional[float] = None,
-    ):
+    ) -> T:
         """Execute operation with retry logic"""
         if self._closed:
             raise CacheConnectionError("Client is closed")
@@ -261,7 +280,7 @@ class CacheClient:
         # Ensure we have a healthy connection
         await self._ensure_connection()
 
-        last_exception = None
+        last_exception: Optional[BaseException] = None
         
         for attempt in range(effective_max_retries + 1):
             try:
@@ -332,12 +351,15 @@ class CacheClient:
                     continue
                 self.logger.error("Request timeout after all retries")
                 raise CacheTimeoutError("Request timeout after retries") from e
+            except CacheError:
+                raise
             except Exception as e:
                 raise CacheError(f"Unexpected error: {e}") from e
-        
-        # If we get here, all retries failed
-        if last_exception:
-            raise last_exception
+	        
+        # Defensive: we should never fall through without returning or raising.
+        if last_exception is not None:
+            raise CacheError("Operation failed after retries") from last_exception
+        raise CacheError("Operation failed after retries")
 
     async def get(
         self,
@@ -369,8 +391,11 @@ class CacheClient:
         call_metadata = self._merge_metadata(metadata)
         self.logger.debug("Getting value for key: %s", key)
         
-        async def _get_operation():
-            response = await self._stub.Get(
+        async def _get_operation() -> Optional[str]:
+            stub = self._stub
+            if stub is None:
+                raise CacheConnectionError("Cache client is not connected")
+            response = await stub.Get(
                 cache_pb2.CacheKey(key=key),
                 timeout=call_timeout,
                 metadata=call_metadata,
@@ -410,8 +435,11 @@ class CacheClient:
         call_metadata = self._merge_metadata(metadata)
         self.logger.debug("Getting raw value for key: %s", key)
 
-        async def _get_operation():
-            response = await self._stub.Get(
+        async def _get_operation() -> Optional[bytes]:
+            stub = self._stub
+            if stub is None:
+                raise CacheConnectionError("Cache client is not connected")
+            response = await stub.Get(
                 cache_pb2.CacheKey(key=key),
                 timeout=call_timeout,
                 metadata=call_metadata,
@@ -469,8 +497,11 @@ class CacheClient:
         
         self.logger.debug("Setting value for key: %s, ttl: %s", key, ttl)
         
-        async def _set_operation():
-            response = await self._stub.Set(
+        async def _set_operation() -> bool:
+            stub = self._stub
+            if stub is None:
+                raise CacheConnectionError("Cache client is not connected")
+            response = await stub.Set(
                 cache_pb2.CacheItem(
                     key=key,
                     value=validated_value.encode('utf-8'),
@@ -526,8 +557,11 @@ class CacheClient:
 
         self.logger.debug("Setting raw value for key: %s, ttl: %s", key, ttl)
 
-        async def _set_operation():
-            response = await self._stub.Set(
+        async def _set_operation() -> bool:
+            stub = self._stub
+            if stub is None:
+                raise CacheConnectionError("Cache client is not connected")
+            response = await stub.Set(
                 cache_pb2.CacheItem(
                     key=key,
                     value=value_bytes,
@@ -577,8 +611,11 @@ class CacheClient:
         call_metadata = self._merge_metadata(metadata)
         self.logger.debug("Deleting key: %s", key)
         
-        async def _delete_operation():
-            response = await self._stub.Delete(
+        async def _delete_operation() -> bool:
+            stub = self._stub
+            if stub is None:
+                raise CacheConnectionError("Cache client is not connected")
+            response = await stub.Delete(
                 cache_pb2.CacheKey(key=key),
                 timeout=call_timeout,
                 metadata=call_metadata,
@@ -620,8 +657,11 @@ class CacheClient:
             raise CacheValidationError("Timeout must be positive")
         call_metadata = self._merge_metadata(metadata)
         
-        async def _stats_operation():
-            response = await self._stub.Stats(
+        async def _stats_operation() -> Dict[str, Any]:
+            stub = self._stub
+            if stub is None:
+                raise CacheConnectionError("Cache client is not connected")
+            response = await stub.Stats(
                 cache_pb2.Empty(),
                 timeout=call_timeout,
                 metadata=call_metadata,
@@ -651,8 +691,13 @@ class CacheClient:
         self.logger.debug("Pinging cache service")
         call_metadata = self._merge_metadata(metadata)
         try:
+            if not self.is_connected():
+                await self.connect()
+            stub = self._stub
+            if stub is None:
+                return False
             # Use direct gRPC call to avoid retry logic
-            await self._stub.Stats(cache_pb2.Empty(), timeout=5.0, metadata=call_metadata)
+            await stub.Stats(cache_pb2.Empty(), timeout=5.0, metadata=call_metadata)
             self.logger.debug("Ping successful")
             return True
         except asyncio.CancelledError:
