@@ -11,7 +11,6 @@ from tiny_cache_py import (
     CacheConnectionError,
     CacheValidationError,
     CacheTimeoutError,
-    CacheNotFoundError,
     CacheInvalidArgumentError
 )
 from tiny_cache_py import cache_pb2
@@ -563,7 +562,7 @@ class TestCacheClientOperations:
         
         # Mock successful response
         mock_response = Mock()
-        mock_response.status = "OK"
+        mock_response.status = cache_pb2.CacheStatus.OK
         client._stub.Set.return_value = mock_response
         
         result = await client.set("test_key", "test_value", ttl=300)
@@ -581,7 +580,7 @@ class TestCacheClientOperations:
         client = client_with_mock_stub
 
         mock_response = Mock()
-        mock_response.status = "OK"
+        mock_response.status = cache_pb2.CacheStatus.OK
         client._stub.Set.return_value = mock_response
 
         result = await client.set_bytes("test_key", b"\xff\xfe", ttl=300)
@@ -607,7 +606,7 @@ class TestCacheClientOperations:
         client = client_with_mock_stub
         
         mock_response = Mock()
-        mock_response.status = "OK"
+        mock_response.status = cache_pb2.CacheStatus.OK
         client._stub.Set.return_value = mock_response
         
         await client.set("test_key", "test_value")
@@ -629,7 +628,7 @@ class TestCacheClientOperations:
         client = client_with_mock_stub
         
         mock_response = Mock()
-        mock_response.status = "OK"
+        mock_response.status = cache_pb2.CacheStatus.OK
         client._stub.Delete.return_value = mock_response
         
         result = await client.delete("test_key")
@@ -640,29 +639,17 @@ class TestCacheClientOperations:
         assert call_args.key == "test_key"
 
     @pytest.mark.asyncio
-    async def test_delete_not_found(self, client_with_mock_stub):
-        """Test delete operation when key not found."""
+    async def test_delete_error_status(self, client_with_mock_stub):
+        """Test delete operation returning False on ERROR status."""
         client = client_with_mock_stub
-        
+
         mock_response = Mock()
-        mock_response.status = "NOT_FOUND"
+        mock_response.status = cache_pb2.CacheStatus.ERROR
         client._stub.Delete.return_value = mock_response
-        
-        result = await client.delete("missing_key")
-        
+
+        result = await client.delete("test_key")
+
         assert result is False
-
-    @pytest.mark.asyncio
-    async def test_delete_not_found_raise(self, client_with_mock_stub):
-        """Test delete operation raising when key not found."""
-        client = client_with_mock_stub
-
-        mock_response = Mock()
-        mock_response.status = "NOT_FOUND"
-        client._stub.Delete.return_value = mock_response
-
-        with pytest.raises(CacheNotFoundError, match="Key not found: missing_key"):
-            await client.delete("missing_key", raise_on_missing=True)
 
     @pytest.mark.asyncio
     async def test_stats_success(self, client_with_mock_stub):
@@ -673,6 +660,11 @@ class TestCacheClientOperations:
         mock_response.size = 100
         mock_response.hits = 80
         mock_response.misses = 20
+        mock_response.evictions = 3
+        mock_response.hit_rate = 0.8
+        mock_response.memory_usage_bytes = 1234
+        mock_response.max_memory_bytes = 10_000
+        mock_response.max_items = 1000
         client._stub.Stats.return_value = mock_response
         
         result = await client.stats()
@@ -681,7 +673,11 @@ class TestCacheClientOperations:
             "size": 100,
             "hits": 80,
             "misses": 20,
-            "hit_rate": 0.8
+            "evictions": 3,
+            "hit_rate": 0.8,
+            "memory_usage_bytes": 1234,
+            "max_memory_bytes": 10_000,
+            "max_items": 1000,
         }
         assert result == expected
 
@@ -694,6 +690,11 @@ class TestCacheClientOperations:
         mock_response.size = 0
         mock_response.hits = 0
         mock_response.misses = 0
+        mock_response.evictions = 0
+        mock_response.hit_rate = 0.0
+        mock_response.memory_usage_bytes = 0
+        mock_response.max_memory_bytes = 1
+        mock_response.max_items = 1000
         client._stub.Stats.return_value = mock_response
         
         result = await client.stats()
@@ -929,7 +930,6 @@ class TestExceptionHierarchy:
         assert issubclass(CacheConnectionError, CacheError)
         assert issubclass(CacheValidationError, CacheError)
         assert issubclass(CacheTimeoutError, CacheError)
-        assert issubclass(CacheNotFoundError, CacheError)
         assert issubclass(CacheInvalidArgumentError, CacheError)
 
     def test_exception_messages(self):

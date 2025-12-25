@@ -38,10 +38,6 @@ class CacheTimeoutError(CacheError):
     """Raised when request times out"""
     pass
 
-class CacheNotFoundError(CacheError):
-    """Raised when requested key is not found"""
-    pass
-
 class CacheInvalidArgumentError(CacheError):
     """Raised when invalid arguments are provided"""
     pass
@@ -511,7 +507,7 @@ class CacheClient:
                 timeout=call_timeout,
                 metadata=call_metadata,
             )
-            success = response.status == "OK"
+            success = response.status == cache_pb2.CacheStatus.OK
             if success:
                 self.logger.debug("Successfully set value for key: %s", key)
             return success
@@ -571,7 +567,7 @@ class CacheClient:
                 timeout=call_timeout,
                 metadata=call_metadata,
             )
-            success = response.status == "OK"
+            success = response.status == cache_pb2.CacheStatus.OK
             if success:
                 self.logger.debug("Successfully set raw value for key: %s", key)
             return success
@@ -586,7 +582,6 @@ class CacheClient:
         self,
         key: str,
         *,
-        raise_on_missing: bool = False,
         timeout: Optional[float] = None,
         max_retries: Optional[int] = None,
         retry_delay: Optional[float] = None,
@@ -597,10 +592,9 @@ class CacheClient:
         
         Args:
             key: Cache key to delete
-            raise_on_missing: Raise CacheNotFoundError when key is missing
             
         Returns:
-            True if key was deleted, False if key didn't exist
+            True if operation succeeded, False otherwise
             
         Raises:
             CacheValidationError: If key is invalid
@@ -623,14 +617,9 @@ class CacheClient:
                 timeout=call_timeout,
                 metadata=call_metadata,
             )
-            if response.status == "OK":
+            if response.status == cache_pb2.CacheStatus.OK:
                 self.logger.debug("Successfully deleted key: %s", key)
                 return True
-            if response.status == "NOT_FOUND":
-                self.logger.debug("Key not found for deletion: %s", key)
-                if raise_on_missing:
-                    raise CacheNotFoundError(f"Key not found: {key}")
-                return False
             self.logger.debug(
                 "Delete returned status %s for key: %s",
                 response.status,
@@ -681,7 +670,11 @@ class CacheClient:
                 "size": response.size,
                 "hits": response.hits,
                 "misses": response.misses,
-                "hit_rate": response.hits / (response.hits + response.misses) if (response.hits + response.misses) > 0 else 0
+                "evictions": response.evictions,
+                "hit_rate": response.hit_rate,
+                "memory_usage_bytes": response.memory_usage_bytes,
+                "max_memory_bytes": response.max_memory_bytes,
+                "max_items": response.max_items,
             }
             self.logger.debug("Retrieved cache stats: %s", stats)
             return stats

@@ -8,6 +8,10 @@ __pycache__/
 *_pb2_grpc.py
 *_pb2.pyi
 
+!tiny_cache_py/cache_pb2.py
+!tiny_cache_py/cache_pb2_grpc.py
+!tiny_cache_py/cache_pb2.pyi
+
 # C extensions
 *.so
 

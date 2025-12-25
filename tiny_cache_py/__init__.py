@@ -4,7 +4,6 @@ from .client import (
     CacheConnectionError,
     CacheValidationError,
     CacheTimeoutError,
-    CacheNotFoundError,
     CacheInvalidArgumentError
 )
 
@@ -14,6 +13,5 @@ __all__ = [
     'CacheConnectionError',
     'CacheValidationError',
     'CacheTimeoutError',
-    'CacheNotFoundError',
     'CacheInvalidArgumentError'
 ]

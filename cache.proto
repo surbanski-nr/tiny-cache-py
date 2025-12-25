@@ -3,35 +3,47 @@ syntax = "proto3";
 package cache;
 
 service CacheService {
-    rpc Get(CacheKey) returns (CacheValue);
-    rpc Set(CacheItem) returns (CacheResponse);
-    rpc Delete(CacheKey) returns (CacheResponse);
-    rpc Stats(Empty) returns (CacheStats);
+  rpc Get (CacheKey) returns (CacheValue);
+  rpc Set (CacheItem) returns (CacheResponse);
+  rpc Delete (CacheKey) returns (CacheResponse);
+  rpc Stats (Empty) returns (CacheStats);
+}
+
+enum CacheStatus {
+  CACHE_STATUS_UNSPECIFIED = 0;
+  OK = 1;
+  ERROR = 2;
 }
 
 message CacheKey {
-    string key = 1;
+  string key = 1;
 }
 
 message CacheItem {
-    string key = 1;
-    bytes value = 2;
-    int32 ttl = 3;
+  string key = 1;
+  bytes value = 2;
+  int32 ttl = 3;
 }
 
 message CacheValue {
-    bool found = 1;
-    bytes value = 2;
+  bool found = 1;
+  bytes value = 2;
 }
 
 message CacheResponse {
-    string status = 1;
+  CacheStatus status = 1;
 }
 
 message CacheStats {
-    int64 size = 1;
-    int64 hits = 2;
-    int64 misses = 3;
+  int32 size = 1;
+  int32 hits = 2;
+  int32 misses = 3;
+  int32 evictions = 4;
+  double hit_rate = 5;
+  int64 memory_usage_bytes = 6;
+  int64 max_memory_bytes = 7;
+  int32 max_items = 8;
 }
 
 message Empty {}
+

@@ -56,7 +56,7 @@ class TestCacheClientIntegration:
             assert retrieved is None
             
             deleted = await client.delete(key)
-            assert deleted is False
+            assert deleted is True
         finally:
             await client.close()
     
