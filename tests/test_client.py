@@ -415,6 +415,22 @@ class TestCacheClientOperations:
         client._stub.Get.assert_called_once()
         call_args = client._stub.Get.call_args[0][0]
         assert call_args.key == "test_key"
+        assert client._stub.Get.call_args.kwargs["timeout"] == client.timeout
+
+    @pytest.mark.asyncio
+    async def test_get_timeout_override(self, client_with_mock_stub):
+        """Test get accepts per-call timeout overrides."""
+        client = client_with_mock_stub
+
+        mock_response = Mock()
+        mock_response.found = True
+        mock_response.value = b"test_value"
+        client._stub.Get.return_value = mock_response
+
+        result = await client.get("test_key", timeout=1.23)
+
+        assert result == "test_value"
+        assert client._stub.Get.call_args.kwargs["timeout"] == 1.23
 
     @pytest.mark.asyncio
     async def test_get_invalid_utf8_raises(self, client_with_mock_stub):
@@ -665,6 +681,23 @@ class TestCacheClientErrorHandling:
         
         # Verify that Get was called the expected number of times
         assert client._stub.Get.call_count >= 3
+
+    @pytest.mark.asyncio
+    async def test_max_retries_override(self, client_with_mock_stub):
+        """Test per-call max_retries override."""
+        client = client_with_mock_stub
+        client._last_health_check = time.time()
+
+        grpc_error = grpc.RpcError()
+        grpc_error.code = Mock(return_value=StatusCode.UNAVAILABLE)
+        grpc_error.details = Mock(return_value="Service unavailable")
+
+        client._stub.Get.side_effect = grpc_error
+
+        with pytest.raises(CacheConnectionError, match="Cache service unavailable after retries"):
+            await client.get("test_key", max_retries=0)
+
+        assert client._stub.Get.call_count == 1
 
     @pytest.mark.asyncio
     async def test_grpc_invalid_argument(self, client_with_mock_stub):

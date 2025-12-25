@@ -227,43 +227,59 @@ class CacheClient:
             except Exception as e:
                 raise CacheValidationError(f"Cannot convert value to string: {e}")
 
-    async def _execute_with_retry(self, operation, *args, **kwargs):
+    async def _execute_with_retry(
+        self,
+        operation,
+        *,
+        max_retries: Optional[int] = None,
+        retry_delay: Optional[float] = None,
+    ):
         """Execute operation with retry logic"""
         if self._closed:
             raise CacheConnectionError("Client is closed")
+
+        effective_max_retries = self.max_retries if max_retries is None else max_retries
+        effective_retry_delay = self.retry_delay if retry_delay is None else retry_delay
+
+        if effective_max_retries < 0:
+            raise CacheValidationError("Max retries must be non-negative")
+        if effective_retry_delay < 0:
+            raise CacheValidationError("Retry delay must be non-negative")
             
         # Ensure we have a healthy connection
         await self._ensure_connection()
 
         last_exception = None
         
-        for attempt in range(self.max_retries + 1):
+        for attempt in range(effective_max_retries + 1):
             try:
-                return await operation(*args, **kwargs)
+                return await operation()
             except asyncio.CancelledError:
                 raise
             except grpc.RpcError as e:
                 last_exception = e
                 if e.code() == StatusCode.UNAVAILABLE:
-                    if attempt < self.max_retries:
-                        self.logger.warning(f"Cache service unavailable, retrying ({attempt + 1}/{self.max_retries})")
+                    if attempt < effective_max_retries:
+                        self.logger.warning(
+                            f"Cache service unavailable, retrying ({attempt + 1}/{effective_max_retries})"
+                        )
                         # Try to reconnect on unavailable error
                         try:
                             expected_channel = self._channel
                             await self._reconnect(expected_channel=expected_channel)
                         except Exception as reconnect_error:
                             self.logger.warning(f"Reconnection attempt failed: {reconnect_error}")
-                        backoff = self.retry_delay * (2 ** attempt)
+                        backoff = effective_retry_delay * (2 ** attempt)
                         await asyncio.sleep(random.uniform(0, backoff))
                         continue
                     self.logger.error("Cache service unavailable after all retries")
                     raise CacheConnectionError("Cache service unavailable after retries") from e
                 elif e.code() == StatusCode.DEADLINE_EXCEEDED:
-                    if attempt < self.max_retries:
+                    if attempt < effective_max_retries:
                         self.logger.warning(
-                            f"Request deadline exceeded, retrying ({attempt + 1}/{self.max_retries})"
+                            f"Request deadline exceeded, retrying ({attempt + 1}/{effective_max_retries})"
                         )
-                        backoff = self.retry_delay * (2 ** attempt)
+                        backoff = effective_retry_delay * (2 ** attempt)
                         await asyncio.sleep(random.uniform(0, backoff))
                         continue
                     self.logger.error("Request deadline exceeded after all retries")
@@ -289,9 +305,11 @@ class CacheClient:
                     raise CacheError(f"gRPC error: {e.details()}") from e
             except asyncio.TimeoutError as e:
                 last_exception = CacheTimeoutError("Request timeout")
-                if attempt < self.max_retries:
-                    self.logger.warning(f"Request timeout, retrying ({attempt + 1}/{self.max_retries})")
-                    backoff = self.retry_delay * (2 ** attempt)
+                if attempt < effective_max_retries:
+                    self.logger.warning(
+                        f"Request timeout, retrying ({attempt + 1}/{effective_max_retries})"
+                    )
+                    backoff = effective_retry_delay * (2 ** attempt)
                     await asyncio.sleep(random.uniform(0, backoff))
                     continue
                 self.logger.error("Request timeout after all retries")
@@ -303,7 +321,14 @@ class CacheClient:
         if last_exception:
             raise last_exception
 
-    async def get(self, key: str) -> Optional[str]:
+    async def get(
+        self,
+        key: str,
+        *,
+        timeout: Optional[float] = None,
+        max_retries: Optional[int] = None,
+        retry_delay: Optional[float] = None,
+    ) -> Optional[str]:
         """
         Get value from cache.
         
@@ -319,12 +344,15 @@ class CacheClient:
             CacheError: For other errors
         """
         self._validate_key(key)
+        call_timeout = self.timeout if timeout is None else timeout
+        if call_timeout <= 0:
+            raise CacheValidationError("Timeout must be positive")
         self.logger.debug(f"Getting value for key: {key}")
         
         async def _get_operation():
             response = await self._stub.Get(
                 cache_pb2.CacheKey(key=key),
-                timeout=self.timeout,
+                timeout=call_timeout,
             )
             if response.found:
                 self.logger.debug(f"Cache hit for key: {key}")
@@ -336,19 +364,33 @@ class CacheClient:
                 self.logger.debug(f"Cache miss for key: {key}")
             return None
             
-        return await self._execute_with_retry(_get_operation)
+        return await self._execute_with_retry(
+            _get_operation,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+        )
 
-    async def get_bytes(self, key: str) -> Optional[bytes]:
+    async def get_bytes(
+        self,
+        key: str,
+        *,
+        timeout: Optional[float] = None,
+        max_retries: Optional[int] = None,
+        retry_delay: Optional[float] = None,
+    ) -> Optional[bytes]:
         """
         Get raw bytes value from cache.
         """
         self._validate_key(key)
+        call_timeout = self.timeout if timeout is None else timeout
+        if call_timeout <= 0:
+            raise CacheValidationError("Timeout must be positive")
         self.logger.debug(f"Getting raw value for key: {key}")
 
         async def _get_operation():
             response = await self._stub.Get(
                 cache_pb2.CacheKey(key=key),
-                timeout=self.timeout,
+                timeout=call_timeout,
             )
             if response.found:
                 self.logger.debug(f"Cache hit for key: {key}")
@@ -356,13 +398,21 @@ class CacheClient:
             self.logger.debug(f"Cache miss for key: {key}")
             return None
 
-        return await self._execute_with_retry(_get_operation)
+        return await self._execute_with_retry(
+            _get_operation,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+        )
 
     async def set(
         self,
         key: str,
         value: Any,
-        ttl: Optional[int] = None
+        ttl: Optional[int] = None,
+        *,
+        timeout: Optional[float] = None,
+        max_retries: Optional[int] = None,
+        retry_delay: Optional[float] = None,
     ) -> bool:
         """
         Set value in cache.
@@ -382,6 +432,9 @@ class CacheClient:
         """
         self._validate_key(key)
         validated_value = self._validate_value(value)
+        call_timeout = self.timeout if timeout is None else timeout
+        if call_timeout <= 0:
+            raise CacheValidationError("Timeout must be positive")
         
         if ttl is None:
             ttl = self.default_ttl
@@ -397,20 +450,28 @@ class CacheClient:
                     value=validated_value.encode('utf-8'),
                     ttl=ttl,
                 ),
-                timeout=self.timeout,
+                timeout=call_timeout,
             )
             success = response.status == "OK"
             if success:
                 self.logger.debug(f"Successfully set value for key: {key}")
             return success
             
-        return await self._execute_with_retry(_set_operation)
+        return await self._execute_with_retry(
+            _set_operation,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+        )
 
     async def set_bytes(
         self,
         key: str,
         value: bytes,
         ttl: Optional[int] = None,
+        *,
+        timeout: Optional[float] = None,
+        max_retries: Optional[int] = None,
+        retry_delay: Optional[float] = None,
     ) -> bool:
         """
         Store raw bytes value in cache.
@@ -419,6 +480,9 @@ class CacheClient:
             ttl: Time to live in seconds (None for default_ttl, 0 disables expiry)
         """
         self._validate_key(key)
+        call_timeout = self.timeout if timeout is None else timeout
+        if call_timeout <= 0:
+            raise CacheValidationError("Timeout must be positive")
         if value is None:
             raise CacheValidationError("Value cannot be None")
         if not isinstance(value, (bytes, bytearray, memoryview)):
@@ -440,16 +504,27 @@ class CacheClient:
                     value=value_bytes,
                     ttl=ttl,
                 ),
-                timeout=self.timeout,
+                timeout=call_timeout,
             )
             success = response.status == "OK"
             if success:
                 self.logger.debug(f"Successfully set raw value for key: {key}")
             return success
 
-        return await self._execute_with_retry(_set_operation)
+        return await self._execute_with_retry(
+            _set_operation,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+        )
 
-    async def delete(self, key: str) -> bool:
+    async def delete(
+        self,
+        key: str,
+        *,
+        timeout: Optional[float] = None,
+        max_retries: Optional[int] = None,
+        retry_delay: Optional[float] = None,
+    ) -> bool:
         """
         Delete key from cache.
         
@@ -465,12 +540,15 @@ class CacheClient:
             CacheError: For other errors
         """
         self._validate_key(key)
+        call_timeout = self.timeout if timeout is None else timeout
+        if call_timeout <= 0:
+            raise CacheValidationError("Timeout must be positive")
         self.logger.debug(f"Deleting key: {key}")
         
         async def _delete_operation():
             response = await self._stub.Delete(
                 cache_pb2.CacheKey(key=key),
-                timeout=self.timeout,
+                timeout=call_timeout,
             )
             success = response.status == "OK"
             if success:
@@ -479,9 +557,19 @@ class CacheClient:
                 self.logger.debug(f"Key not found for deletion: {key}")
             return success
             
-        return await self._execute_with_retry(_delete_operation)
+        return await self._execute_with_retry(
+            _delete_operation,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+        )
 
-    async def stats(self) -> Dict[str, Any]:
+    async def stats(
+        self,
+        *,
+        timeout: Optional[float] = None,
+        max_retries: Optional[int] = None,
+        retry_delay: Optional[float] = None,
+    ) -> Dict[str, Any]:
         """
         Get cache statistics.
         
@@ -493,11 +581,14 @@ class CacheClient:
             CacheError: For other errors
         """
         self.logger.debug("Requesting cache statistics")
+        call_timeout = self.timeout if timeout is None else timeout
+        if call_timeout <= 0:
+            raise CacheValidationError("Timeout must be positive")
         
         async def _stats_operation():
             response = await self._stub.Stats(
                 cache_pb2.Empty(),
-                timeout=self.timeout,
+                timeout=call_timeout,
             )
             stats = {
                 "size": response.size,
@@ -508,7 +599,11 @@ class CacheClient:
             self.logger.debug(f"Retrieved cache stats: {stats}")
             return stats
             
-        return await self._execute_with_retry(_stats_operation)
+        return await self._execute_with_retry(
+            _stats_operation,
+            max_retries=max_retries,
+            retry_delay=retry_delay,
+        )
 
     async def ping(self) -> bool:
         """
