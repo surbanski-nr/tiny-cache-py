@@ -26,6 +26,7 @@ from .errors import (
     CacheTimeoutError,
     CacheValidationError,
 )
+from .serialization import coerce_text_value, normalize_bytes_value, validate_key
 
 T = TypeVar("T")
 
@@ -178,33 +179,10 @@ class CacheClient:
             self.logger.debug("Cache client connection closed")
 
     def _validate_key(self, key: str) -> None:
-        """Validate cache key"""
-        if not isinstance(key, str):
-            raise CacheValidationError("Key must be a string")
-        if not key:
-            raise CacheValidationError("Key cannot be empty")
-        if len(key) > 250:
-            raise CacheValidationError("Key too long (max 250 characters)")
+        validate_key(key)
 
     def _validate_value(self, value: Any) -> str:
-        """Validate and convert value to string"""
-        if value is None:
-            raise CacheValidationError("Value cannot be None")
-        
-        if isinstance(value, str):
-            return value
-        elif isinstance(value, (int, float, bool)):
-            return str(value)
-        elif isinstance(value, bytes):
-            try:
-                return value.decode('utf-8')
-            except UnicodeDecodeError:
-                raise CacheValidationError("Bytes value must be valid UTF-8")
-        else:
-            try:
-                return str(value)
-            except Exception as e:
-                raise CacheValidationError(f"Cannot convert value to string: {e}")
+        return coerce_text_value(value)
 
     async def _execute_with_retry(
         self,
@@ -332,7 +310,7 @@ class CacheClient:
             CacheConnectionError: If service is unavailable
             CacheError: For other errors
         """
-        self._validate_key(key)
+        validate_key(key)
         call_timeout = self.timeout if timeout is None else timeout
         if call_timeout <= 0:
             raise CacheValidationError("Timeout must be positive")
@@ -376,7 +354,7 @@ class CacheClient:
         """
         Get raw bytes value from cache.
         """
-        self._validate_key(key)
+        validate_key(key)
         call_timeout = self.timeout if timeout is None else timeout
         if call_timeout <= 0:
             raise CacheValidationError("Timeout must be positive")
@@ -431,8 +409,8 @@ class CacheClient:
             CacheConnectionError: If service is unavailable
             CacheError: For other errors
         """
-        self._validate_key(key)
-        validated_value = self._validate_value(value)
+        validate_key(key)
+        validated_value = coerce_text_value(value)
         call_timeout = self.timeout if timeout is None else timeout
         if call_timeout <= 0:
             raise CacheValidationError("Timeout must be positive")
@@ -486,17 +464,12 @@ class CacheClient:
         Args:
             ttl: Time to live in seconds (None for default_ttl, 0 disables expiry)
         """
-        self._validate_key(key)
+        validate_key(key)
         call_timeout = self.timeout if timeout is None else timeout
         if call_timeout <= 0:
             raise CacheValidationError("Timeout must be positive")
         call_metadata = self._merge_metadata(metadata)
-        if value is None:
-            raise CacheValidationError("Value cannot be None")
-        if not isinstance(value, (bytes, bytearray, memoryview)):
-            raise CacheValidationError("Value must be bytes")
-
-        value_bytes = bytes(value)
+        value_bytes = normalize_bytes_value(value)
 
         if ttl is None:
             ttl = self.default_ttl
@@ -552,7 +525,7 @@ class CacheClient:
             CacheConnectionError: If service is unavailable
             CacheError: For other errors
         """
-        self._validate_key(key)
+        validate_key(key)
         call_timeout = self.timeout if timeout is None else timeout
         if call_timeout <= 0:
             raise CacheValidationError("Timeout must be positive")
