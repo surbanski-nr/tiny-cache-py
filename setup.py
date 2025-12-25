@@ -10,7 +10,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         "grpcio>=1.76.0",
-        "grpcio-tools>=1.76.0",
+        "grpcio-tools>=1.76.0,<2.0.0",
         "protobuf>=6.31.1,<7.0.0",
     ],
     extras_require={
