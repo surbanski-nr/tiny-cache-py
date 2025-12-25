@@ -12,7 +12,7 @@ async def test_cache():
     print("=== Tiny Cache Python Client Test ===\n")
     
     try:
-        async with CacheClient("localhost", 50051, timeout=5.0) as client:
+        async with CacheClient("localhost:50051", timeout=5.0) as client:
             print("✓ Connected to cache service")
             
             if await client.ping():
@@ -102,7 +102,7 @@ async def test_connection_pooling():
     """Test connection pooling and reuse"""
     print("\n=== Testing Connection Pooling ===")
     
-    client = CacheClient("localhost", 50051)
+    client = CacheClient("localhost:50051")
     
     try:
         await client.connect()
