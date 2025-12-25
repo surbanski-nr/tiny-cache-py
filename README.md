@@ -1,11 +1,11 @@
 # tiny-cache-py
 
-A Python client library for the tiny-cache gRPC service, providing efficient distributed caching with connection pooling and comprehensive error handling.
+A Python client library for the tiny-cache gRPC service, providing efficient distributed caching with persistent channel reuse and comprehensive error handling.
 
 ## Features
 
 - **Complete API Coverage**: Get, Set, Delete, Stats, and Ping operations
-- **Connection Pooling**: Efficient resource management with persistent channels
+- **Persistent Channel**: Efficient resource management with a single reused channel
 - **Error Handling**: Comprehensive exception handling with custom error types
 - **Type Safety**: Full type hints and input validation
 - **Retry Logic**: Exponential backoff for transient failures
@@ -47,23 +47,15 @@ async def main():
 asyncio.run(main())
 ```
 
-## Configuration
-
-Environment variables:
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `CACHE_SERVER_ADDRESS` | localhost:50051 | gRPC server address |
-| `CACHE_MAX_RETRIES` | 3 | Maximum retry attempts |
-| `CACHE_TIMEOUT` | 30.0 | Request timeout in seconds |
-
 ## API
 
 ### CacheClient Methods
 
 - `get(key: str) → Optional[str]`: Retrieve cached value
+- `get_bytes(key: str) → Optional[bytes]`: Retrieve cached raw bytes
 - `set(key: str, value: Any, ttl: Optional[int]) → bool`: Store value with optional TTL (seconds; `None` uses default, `0` disables expiry)
-- `delete(key: str) → bool`: Remove cached entry
+- `set_bytes(key: str, value: bytes, ttl: Optional[int]) → bool`: Store raw bytes with optional TTL
+- `delete(key: str, raise_on_missing: bool = False) → bool`: Remove cached entry
 - `stats() → Dict[str, Any]`: Get cache statistics
 - `ping() → bool`: Check server availability
 
@@ -127,8 +119,15 @@ pytest -m unit          # Unit tests only
 pytest -m integration   # Integration tests only
 
 # Run benchmarks
-python benchmarks/benchmark_client.py
+make benchmark
 ```
+
+### Protobuf generation
+
+`cache.proto` in this repo is the source of truth.
+
+- Regenerate gRPC code: `make proto`
+- Verify generated code matches the proto: `make proto-check`
 
 ### Code Quality
 
@@ -148,12 +147,12 @@ make quality
 - **Throughput**: 10,000+ operations/second (local network)
 - **Latency**: <5ms average (local network)
 - **Concurrent Clients**: Supports hundreds of concurrent connections
-- **Memory Efficient**: Minimal overhead with connection pooling
+- **Memory Efficient**: Minimal overhead with persistent channel reuse
 
 ## Compatibility
 
 - Python 3.8 - 3.13
-- gRPC 1.50.0+
+- gRPC 1.76.0+
 - Compatible with tiny-cache server v0.1.0+
 
 ## License
