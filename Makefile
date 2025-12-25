@@ -29,8 +29,13 @@ proto: ## Generate protobuf files from this repo's cache.proto
 gen: proto ## Alias for proto target
 
 # Testing
-test: ## Run unit tests with pytest
-	$(PYTHON) -m pytest tests/ -v
+test: test-unit ## Run unit tests with pytest
+
+test-unit: ## Run unit tests (no server required)
+	$(PYTHON) -m pytest -m "not integration" tests/ -q
+
+test-integration: ## Run integration tests (requires running server)
+	$(PYTHON) -m pytest -m "integration" tests/ -q
 
 test-coverage: ## Run tests with coverage report
 	$(PYTHON) -m pytest tests/ --cov=tiny_cache_py --cov-report=html --cov-report=term
@@ -60,4 +65,4 @@ clean: ## Clean generated files
 # Development workflow
 dev: setup proto test ## Complete development setup and test
 
-.PHONY: help setup install proto gen test test-coverage benchmark lint format format-check quality clean dev
+.PHONY: help setup install proto gen test test-unit test-integration test-coverage benchmark lint format format-check quality clean dev
