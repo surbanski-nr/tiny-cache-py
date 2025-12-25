@@ -699,6 +699,22 @@ class TestCacheClientErrorHandling:
         assert excinfo.value.__cause__ is grpc_error
 
     @pytest.mark.asyncio
+    async def test_grpc_deadline_exceeded(self, client_with_mock_stub):
+        """Test gRPC deadline exceeded error."""
+        client = client_with_mock_stub
+
+        grpc_error = grpc.RpcError()
+        grpc_error.code = Mock(return_value=StatusCode.DEADLINE_EXCEEDED)
+        grpc_error.details = Mock(return_value="Request timed out")
+
+        client._stub.Get.side_effect = grpc_error
+
+        with pytest.raises(CacheTimeoutError, match="Deadline exceeded: Request timed out") as excinfo:
+            await client.get("test_key")
+
+        assert excinfo.value.__cause__ is grpc_error
+
+    @pytest.mark.asyncio
     async def test_timeout_with_retry(self, client_with_mock_stub):
         """Test timeout error with retry."""
         client = client_with_mock_stub

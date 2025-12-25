@@ -259,9 +259,20 @@ class CacheClient:
                         continue
                     self.logger.error("Cache service unavailable after all retries")
                     raise CacheConnectionError("Cache service unavailable after retries") from e
+                elif e.code() == StatusCode.DEADLINE_EXCEEDED:
+                    self.logger.error(f"Request deadline exceeded: {e.details()}")
+                    raise CacheTimeoutError(f"Deadline exceeded: {e.details()}") from e
                 elif e.code() == StatusCode.INVALID_ARGUMENT:
                     self.logger.error(f"Invalid argument error: {e.details()}")
                     raise CacheInvalidArgumentError(f"Invalid argument: {e.details()}") from e
+                elif e.code() == StatusCode.PERMISSION_DENIED:
+                    self.logger.error(f"Permission denied: {e.details()}")
+                    raise CacheError(f"Permission denied: {e.details()}") from e
+                elif e.code() == StatusCode.UNAUTHENTICATED:
+                    self.logger.error(f"Unauthenticated: {e.details()}")
+                    raise CacheError(f"Unauthenticated: {e.details()}") from e
+                elif e.code() == StatusCode.CANCELLED:
+                    raise asyncio.CancelledError() from e
                 elif e.code() == StatusCode.RESOURCE_EXHAUSTED:
                     self.logger.error(f"Cache resource exhausted: {e.details()}")
                     raise CacheError(f"Cache full: {e.details()}") from e
