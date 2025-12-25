@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import random
+import time
 from types import TracebackType
 from typing import (
     Any,
@@ -726,8 +727,6 @@ class CacheClient:
     
     async def _check_connection_health(self) -> bool:
         """Check if the connection is healthy by performing a lightweight operation"""
-        import time
-
         if self._health_check_interval is None or self._health_check_interval <= 0:
             return True
 
