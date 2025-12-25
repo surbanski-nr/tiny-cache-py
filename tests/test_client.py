@@ -189,10 +189,29 @@ class TestCacheClientConnection:
         """Test connecting when already connected."""
         client = CacheClient()
         client._channel = AsyncMock()
+        client._stub = Mock()
         
         with patch('grpc.aio.insecure_channel') as mock_channel:
             await client.connect()
             mock_channel.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_connect_existing_channel_missing_stub(self):
+        """Test rebuilding stub when channel exists but stub does not."""
+        client = CacheClient("localhost:50051", use_ssl=False)
+        client._channel = AsyncMock()
+        client._stub = None
+
+        with patch('grpc.aio.insecure_channel') as mock_channel, \
+             patch('tiny_cache_py.cache_pb2_grpc.CacheServiceStub') as mock_stub:
+            mock_stub_instance = Mock()
+            mock_stub.return_value = mock_stub_instance
+
+            await client.connect()
+
+            mock_channel.assert_not_called()
+            mock_stub.assert_called_once_with(client._channel)
+            assert client._stub == mock_stub_instance
 
     @pytest.mark.asyncio
     async def test_close(self):

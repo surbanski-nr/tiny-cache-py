@@ -95,8 +95,13 @@ class CacheClient:
 
     async def connect(self) -> None:
         """Establish connection to cache service"""
-        if self._channel is not None:
+        if self._channel is not None and self._stub is not None and not self._closed:
             self.logger.debug("Already connected to cache service")
+            return
+
+        if self._channel is not None and self._stub is None and not self._closed:
+            self.logger.debug("Channel exists without stub, rebuilding stub")
+            self._stub = cache_pb2_grpc.CacheServiceStub(self._channel)
             return
             
         url = f"{self.host}:{self.port}"
