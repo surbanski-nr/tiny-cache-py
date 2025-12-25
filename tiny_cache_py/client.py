@@ -236,9 +236,8 @@ class CacheClient:
                 self.logger.debug(f"Cache hit for key: {key}")
                 try:
                     return response.value.decode('utf-8')
-                except UnicodeDecodeError:
-                    # Return as bytes if not valid UTF-8
-                    return response.value
+                except UnicodeDecodeError as e:
+                    raise CacheError("Cache value is not valid UTF-8") from e
             else:
                 self.logger.debug(f"Cache miss for key: {key}")
             return None

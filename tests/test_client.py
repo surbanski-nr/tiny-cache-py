@@ -292,6 +292,19 @@ class TestCacheClientOperations:
         assert call_args.key == "test_key"
 
     @pytest.mark.asyncio
+    async def test_get_invalid_utf8_raises(self, client_with_mock_stub):
+        """Test get operation raises when value is not valid UTF-8."""
+        client = client_with_mock_stub
+
+        mock_response = Mock()
+        mock_response.found = True
+        mock_response.value = b"\xff\xfe"
+        client._stub.Get.return_value = mock_response
+
+        with pytest.raises(CacheError, match="valid UTF-8"):
+            await client.get("test_key")
+
+    @pytest.mark.asyncio
     async def test_get_not_found(self, client_with_mock_stub):
         """Test get operation when key not found."""
         client = client_with_mock_stub
