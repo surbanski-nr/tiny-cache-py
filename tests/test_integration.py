@@ -28,7 +28,7 @@ class TestCacheClientIntegration:
     async def _create_client(self):
         """Helper method to create a cache client for testing"""
         client = CacheClient(
-            server_address="localhost:50051",
+            server_address="127.0.0.1:50051",
             timeout=5.0,
             max_retries=2
         )
@@ -114,7 +114,7 @@ class TestCacheClientIntegration:
     @pytest.mark.asyncio
     async def test_context_manager(self):
         """Test using client as context manager"""
-        async with CacheClient("localhost:50051") as client:
+        async with CacheClient("127.0.0.1:50051") as client:
             await client.set("context_test", "value")
             result = await client.get("context_test")
             assert result == "value"
@@ -213,7 +213,7 @@ class TestCacheClientErrorHandling:
     @pytest.mark.asyncio
     async def test_validation_errors(self):
         """Test input validation errors"""
-        client = CacheClient("localhost:50051")
+        client = CacheClient("127.0.0.1:50051")
         
         with pytest.raises(CacheValidationError):
             await client.get(123)
@@ -239,7 +239,7 @@ class TestCacheClientPerformance:
     
     async def _create_client(self):
         """Helper method to create a cache client for testing"""
-        client = CacheClient("localhost:50051")
+        client = CacheClient("127.0.0.1:50051")
         await client.connect()
         return client
     
