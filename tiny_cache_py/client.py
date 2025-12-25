@@ -18,6 +18,7 @@ import grpc
 from grpc import StatusCode
 from . import cache_pb2
 from . import cache_pb2_grpc
+from .config import parse_server_address
 from .errors import (
     CacheError,
     CacheConnectionError,
@@ -69,48 +70,12 @@ class CacheClient:
             health_check_timeout: Health check timeout in seconds
             default_metadata: Default gRPC metadata for all calls
         """
-        address = server_address.strip()
-        if not address:
-            raise CacheValidationError("Server address cannot be empty")
-
-        if address.startswith("grpc://"):
-            address = address[len("grpc://") :]
-            use_ssl = False
-        elif address.startswith("grpcs://"):
-            address = address[len("grpcs://") :]
-            use_ssl = True
-
-        if address.startswith("["):
-            bracket_end = address.find("]")
-            if bracket_end == -1:
-                raise CacheValidationError("Invalid IPv6 server address")
-            self.host = address[1:bracket_end]
-            port_part = address[bracket_end + 1 :]
-            if not port_part:
-                self.port = 50051
-            elif port_part.startswith(":"):
-                self.port = int(port_part[1:])
-            else:
-                raise CacheValidationError("Invalid IPv6 server address")
-        else:
-            if ":" in address:
-                host_part, port_part = address.rsplit(":", 1)
-                self.host = host_part
-                self.port = int(port_part)
-            else:
-                self.host = address
-                self.port = 50051
-
-        if not self.host:
-            raise CacheValidationError("Server host cannot be empty")
-        if not (1 <= self.port <= 65535):
-            raise CacheValidationError("Server port must be between 1 and 65535")
+        self.host, self.port, self.use_ssl = parse_server_address(server_address, use_ssl)
         self.timeout = timeout
         self.connect_timeout = connect_timeout
         self.default_ttl = default_ttl
         self.max_retries = max_retries
         self.retry_delay = retry_delay
-        self.use_ssl = use_ssl
         self.logger = logger or logging.getLogger(__name__)
         self._default_metadata = tuple(default_metadata) if default_metadata else None
         
